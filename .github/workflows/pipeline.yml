@@ -18,7 +18,7 @@ jobs:
       - name: 📦 Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '16' 
+          node-version: '16'
 
       - name: 🧰 Install Dependencies
         run: npm install
@@ -40,13 +40,7 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
         run: |
-          rsync -avz -e "ssh -p $SSH_PORT" \
-            --delete \
-            ./index.html \
-            ./css/html.css \
-            ./js/app.js \
-            ./assets/ \
-            $SSH_USER@$SSH_HOST:/var/www/story-node-editor/
+          rsync -avz -e "ssh -p $SSH_PORT" --delete --exclude '.github/' --exclude 'README.md' --exclude 'docs/' ./ $SSH_USER@$SSH_HOST:/var/www/story-node-editor/
         shell: bash
 
       - name: 🚀 Restart Nginx

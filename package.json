@@ -4,8 +4,10 @@
     "scripts": {
         "minify:html": "html-minifier --collapse-whitespace --remove-comments --minify-js true --minify-css true -o index.html index.html",
         "minify:css": "cleancss -o css/html.css css/html.css",
-        "minify:js": "mkdir -p js && uglifyjs src/html.js src/node-shape.js lib/joint.js -o js/app.js",
-        "build": "npm run minify:html && npm run minify:css && npm run minify:js"
+        "minify:html.js": "uglifyjs src/html.js -o src/html.js",
+        "minify:node-shape.js": "uglifyjs src/node-shape.js -o src/node-shape.js",
+        "minify:lib": "uglifyjs lib/joint.js -o lib/joint.js",
+        "build": "npm run minify:html && npm run minify:css && npm run minify:html.js && npm run minify:node-shape.js && npm run minify:lib"
     },
     "devDependencies": {
       "html-minifier": "^4.0.0",
