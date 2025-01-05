@@ -1,0 +1,59 @@
+name: Publish
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🛠️ Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16' 
+
+      - name: 🧰 Install Dependencies
+        run: npm install
+
+      - name: 🛠️ Build (Minify HTML, CSS, JS)
+        run: npm run build
+
+      - name: 🔐 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+        shell: bash
+
+      - name: 📁 Deploy to Server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          rsync -avz -e "ssh -p $SSH_PORT" \
+            --delete \
+            ./index.min.html \
+            ./css/html.min.css \
+            ./js/app.min.js \
+            ./assets/ \
+            $SSH_USER@$SSH_HOST:/var/www/story-node-editor/
+        shell: bash
+
+      - name: 🚀 Restart Nginx
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "sudo systemctl restart nginx"
+        shell: bash
