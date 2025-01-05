@@ -40,7 +40,16 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
         run: |
-          rsync -avz -e "ssh -p $SSH_PORT" --delete --exclude '.github/' --exclude 'README.md' --exclude 'docs/' ./ $SSH_USER@$SSH_HOST:/var/www/story-node-editor/
+          rsync -avz \
+            -e "ssh -p $SSH_PORT" \
+            --delete \
+            --exclude 'node_modules/' \
+            --exclude 'package.json' \
+            --exclude 'package-lock.json' \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            ./ \
+            $SSH_USER@$SSH_HOST:/var/www/story-node-editor/
         shell: bash
 
       - name: 🚀 Restart Nginx
