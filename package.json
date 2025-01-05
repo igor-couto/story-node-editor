@@ -2,10 +2,10 @@
     "name": "story-node-editor",
     "version": "1.0.0",
     "scripts": {
-      "minify:html": "html-minifier --collapse-whitespace --remove-comments --minify-js true --minify-css true -o index.min.html index.html",
-      "minify:css": "cleancss -o css/html.min.css css/html.css",
-      "minify:js": "mkdir -p js && uglifyjs src/html.js src/node-shape.js lib/joint.js -o js/app.min.js",
-      "build": "npm run minify:html && npm run minify:css && npm run minify:js"
+        "minify:html": "html-minifier --collapse-whitespace --remove-comments --minify-js true --minify-css true -o index.html index.html",
+        "minify:css": "cleancss -o css/html.css css/html.css",
+        "minify:js": "uglifyjs src/html.js src/node-shape.js lib/joint.js -o js/app.js",
+        "build": "npm run minify:html && npm run minify:css && npm run minify:js"
     },
     "devDependencies": {
       "html-minifier": "^4.0.0",
@@ -13,4 +13,3 @@
       "uglify-js": "^3.14.5"
     }
   }
-  

@@ -42,9 +42,9 @@ jobs:
         run: |
           rsync -avz -e "ssh -p $SSH_PORT" \
             --delete \
-            ./index.min.html \
-            ./css/html.min.css \
-            ./js/app.min.js \
+            ./index.html \
+            ./css/html.css \
+            ./js/app.js \
             ./assets/ \
             $SSH_USER@$SSH_HOST:/var/www/story-node-editor/
         shell: bash
