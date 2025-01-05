@@ -1,0 +1,168 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow-y: hidden;
+    cursor: url('../assets/default.png'), default;
+}
+
+#paper {
+    width: 100%;
+    height: 100%;
+}
+
+.node {
+    box-sizing: border-box;
+    font-family: sans-serif;
+    box-shadow: 0px 0px 18px 9px rgba(0,0,0,0.18);
+    background-color: #F1F3F4;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    outline: 2px solid transparent;
+    position: relative; 
+    pointer-events: none;
+}
+
+.node:hover {
+    outline-color: #0D8DE9;
+}
+
+.node-label {
+    display: block;
+    font-size: 13px;
+    color: #222222;
+    padding: 8px 0 0 0;
+    cursor: url('../assets/default.png'), default;
+}
+.node-textarea {
+    resize: none;
+    width: 90%;
+    margin-left:4%;
+    margin-right:6%;
+    margin-top: 40px;
+    margin-bottom: 20px;
+    outline: none;
+    background: #FFFFFF;
+    border: 1px solid #565553;
+    text-align: left;
+    letter-spacing: 0;
+    color: #222222;
+    border-radius: 0px;
+    font-size: 14px;
+}
+
+.delete-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+}
+
+.delete-button img,
+.delete-button svg {
+    width: 100%;
+    height: 100%;
+}
+
+.delete-button:hover {
+    opacity: 0.8;
+}
+
+.choices-section {
+    background-color: #3D3D3D;
+    color: #fff;
+    padding: 16px;
+    border-top: 1px solid #565553;
+}
+  
+.choices-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.add-choice-button {
+    background-color: transparent;
+    color: #fff;
+    font-size: 18px;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    padding: 5px 10px;
+    border-radius: 4px;
+}
+
+.add-choice-button:hover {
+    background-color: #4e4e4e;
+}
+
+.choice {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.choice input[type="text"] {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    outline: none;
+    font-size: 14px;
+    color: #333;
+}
+
+.toolbar {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    background-color: #2C2C2C;
+    border-radius: .8125rem;
+    padding: .5rem;
+    box-shadow: 0px 3px 8px rgba(0, 0, 0, .35), 0px 1px 3px rgba(0, 0, 0, .5), inset 0px 1px 0px rgba(255, 255, 255, .08), inset 0px 0px 1px rgba(255, 255, 255, .3);
+}
+
+.toolbar-button {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    outline: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toolbar-button img {
+    width: 24px;
+    height: 24px;
+}
+
+.toolbar-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.toolbar-separator {
+    width: 1px;
+    height: 32px;
+    background-color: #555;
+    margin: 0 8px;
+}
