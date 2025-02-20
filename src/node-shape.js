@@ -35,7 +35,7 @@
                             portBody: {
                                 magnet: 'passive',
                                 r: 10,
-                                cy: -4,
+                                cy: -8,
                                 fill: '#63C763',
                                 stroke: '#565553'
                             }
@@ -49,7 +49,7 @@
                             portBody: {
                                 magnet: 'active',
                                 r: 10,
-                                cy: 20,
+                                cy: 25,
                                 fill: '#6363C7',
                                 stroke: '#565553'
                             }
@@ -63,6 +63,7 @@
                             portBody: {
                                 magnet: 'active',
                                 r: 10,
+                                cx: 5,
                                 fill: '#C7C729',
                                 stroke: '#565553',
                                 'layer': 'overlay'
