@@ -363,6 +363,12 @@
             '            <button type="button" class="richtext-button" data-command="italic" aria-label="Italic">',
             '                <span aria-hidden="true">I</span>',
             '            </button>',
+            '            <button type="button" class="richtext-button" data-command="underline" aria-label="Underline">',
+            '                <span aria-hidden="true">U</span>',
+            '            </button>',
+            '            <button type="button" class="richtext-button" data-command="strikeThrough" aria-label="Strikethrough">',
+            '                <span aria-hidden="true">S</span>',
+            '            </button>',
             '        </div>',
             '        <button type="button" class="richtext-close" aria-label="Close editor">',
             '            <span aria-hidden="true">&times;</span>',
@@ -378,8 +384,16 @@
         var editorArea = overlay.querySelector('.richtext-editor-area');
         var closeButton = overlay.querySelector('.richtext-close');
         var commandButtons = overlay.querySelectorAll('.richtext-button');
+        var buttonByCommand = {};
+        Array.prototype.forEach.call(commandButtons, function(button) {
+            var command = button.getAttribute('data-command');
+            if (command)
+                buttonByCommand[command] = button;
+        });
+
         var isOpen = false;
         var pendingSave = null;
+        var storedSelection = null;
 
         function open(options) {
             if (!options)
@@ -389,13 +403,16 @@
             overlay.setAttribute('aria-hidden', 'false');
             editorArea.innerHTML = sanitizeHtml(options.initialValue || '');
             isOpen = true;
+            storedSelection = null;
             var scheduleFocus = window.requestAnimationFrame || function(fn) {
                 return setTimeout(fn, 16);
             };
             scheduleFocus(function() {
-                focusEditor();
+                moveCaretToEnd();
+                updateToolbarStates();
             });
             document.addEventListener('keydown', handleKeydown, true);
+            document.addEventListener('selectionchange', handleSelectionChange, true);
         }
 
         function close() {
@@ -407,12 +424,23 @@
             editorArea.innerHTML = '';
             isOpen = false;
             pendingSave = null;
+            storedSelection = null;
             document.removeEventListener('keydown', handleKeydown, true);
+            document.removeEventListener('selectionchange', handleSelectionChange, true);
         }
 
         function focusEditor() {
-            editorArea.focus();
+            try {
+                editorArea.focus({ preventScroll: true });
+            } catch (err) {
+                editorArea.focus();
+            }
+        }
+
+        function moveCaretToEnd() {
+            focusEditor();
             placeCaretAtEnd(editorArea);
+            saveSelection();
         }
 
         function commitChanges() {
@@ -469,6 +497,80 @@
             selection.addRange(range);
         }
 
+        function saveSelection() {
+            var selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) {
+                storedSelection = null;
+                return;
+            }
+            var range = selection.getRangeAt(0);
+            if (editorArea.contains(range.commonAncestorContainer))
+                storedSelection = range.cloneRange();
+            else
+                storedSelection = null;
+        }
+
+        function restoreSelection() {
+            if (!storedSelection)
+                return;
+            var selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(storedSelection);
+        }
+
+        function updateToolbarStates() {
+            if (!isOpen)
+                return;
+            var selection = window.getSelection();
+            var withinEditor = selection && selection.rangeCount && editorArea.contains(selection.anchorNode);
+            setButtonState('bold', withinEditor && document.queryCommandState && document.queryCommandState('bold'));
+            setButtonState('italic', withinEditor && document.queryCommandState && document.queryCommandState('italic'));
+            setButtonState('underline', withinEditor && document.queryCommandState && document.queryCommandState('underline'));
+            setButtonState('strikeThrough', withinEditor && document.queryCommandState && document.queryCommandState('strikeThrough'));
+        }
+
+        function setButtonState(command, isActive) {
+            var button = buttonByCommand[command];
+            if (!button)
+                return;
+            if (isActive)
+                button.classList.add('is-active');
+            else
+                button.classList.remove('is-active');
+        }
+
+        function handleSelectionChange() {
+            if (!isOpen)
+                return;
+            saveSelection();
+            updateToolbarStates();
+        }
+
+        function trackSelection() {
+            if (!isOpen)
+                return;
+            saveSelection();
+            updateToolbarStates();
+        }
+
+        function insertText(text) {
+            if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
+                if (document.execCommand('insertText', false, text))
+                    return;
+            }
+            var selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0)
+                return;
+            var range = selection.getRangeAt(0);
+            range.deleteContents();
+            var textNode = document.createTextNode(text);
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
         Array.prototype.forEach.call(commandButtons, function(button) {
             var command = button.getAttribute('data-command');
             button.addEventListener('mousedown', function(evt) {
@@ -477,20 +579,39 @@
             button.addEventListener('click', function(evt) {
                 evt.preventDefault();
                 focusEditor();
+                restoreSelection();
                 document.execCommand(command, false, null);
+                trackSelection();
                 commitChanges();
             });
+        });
+
+        editorArea.addEventListener('keydown', function(evt) {
+            if (evt.key === 'Tab') {
+                evt.preventDefault();
+                restoreSelection();
+                insertText('    ');
+                trackSelection();
+                commitChanges();
+            }
         });
 
         editorArea.addEventListener('input', function() {
             if (!isOpen)
                 return;
             commitChanges();
+            trackSelection();
         });
+
+        editorArea.addEventListener('focus', trackSelection);
+        editorArea.addEventListener('keyup', trackSelection);
+        editorArea.addEventListener('mouseup', trackSelection);
 
         editorArea.addEventListener('blur', function() {
             if (!isOpen)
                 return;
+            saveSelection();
+            updateToolbarStates();
             commitChanges();
         });
 
@@ -512,10 +633,12 @@
             open: function(options) {
                 if (isOpen)
                     close();
-                open(options);
+                open(options || {});
             }
         };
     }
+
+
     function createNewNode() {
         let rect = paper.el.getBoundingClientRect();
         let centerX = rect.width / 2;
@@ -626,5 +749,6 @@
 
 
 })(joint, V);
+
 
 

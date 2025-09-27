@@ -55,11 +55,20 @@ body {
     font-size: 14px;
     line-height: 1.5;
     min-height: 120px;
-    overflow-wrap: break-word;
+    max-height: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    -webkit-box-orient: vertical;
+    line-clamp: 6;
+    overflow-wrap: anywhere;
     cursor: text;
     outline: none;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
+
 
 .node-content-display:focus {
     border-color: #0D8DE9;
@@ -239,6 +248,11 @@ body {
     cursor: pointer;
 }
 
+.richtext-button span {
+    font-size: 18px;
+    font-style: normal;
+}
+
 .richtext-button:hover,
 .richtext-button:focus {
     border-color: #0D8DE9;
@@ -246,16 +260,30 @@ body {
     outline: none;
 }
 
-.richtext-button span {
-    font-size: 18px;
-    font-style: normal;
+.richtext-button.is-active {
+    border-color: #0D8DE9;
+    background-color: rgba(13, 141, 233, 0.18);
+    color: #0D8DE9;
+}
+
+.richtext-button.is-active span {
+    color: inherit;
 }
 
 .richtext-button[data-command="italic"] span {
     font-style: italic;
 }
 
+.richtext-button[data-command="underline"] span {
+    text-decoration: underline;
+}
+
+.richtext-button[data-command="strikeThrough"] span {
+    text-decoration: line-through;
+}
+
 .richtext-close {
+
     width: 40px;
     height: 40px;
     border: 1px solid transparent;
@@ -301,8 +329,11 @@ body {
 }
 
 .richtext-editor-area:focus {
-    border-color: #0D8DE9;
-    box-shadow: 0 0 0 1px #0D8DE9 inset, inset 0 0 0 1px rgba(0, 0, 0, 0.02);
+    border-color: #DCDCDC;
+    box-shadow: none;
+    outline: none;
 }
+
+
 
 
