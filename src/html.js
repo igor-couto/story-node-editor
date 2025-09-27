@@ -109,6 +109,12 @@
     paper.el.appendChild(htmlContainer);
     paper.htmlContainer = htmlContainer;
 
+    var richTextEditor = createRichTextEditor();
+    window.storyNodeEditor = window.storyNodeEditor || {};
+    window.storyNodeEditor.openTextEditor = function(options) {
+        richTextEditor.open(options || {});
+    };
+
     const magnetAvailabilityHighlighter = {
         name: 'stroke',
         options: {
@@ -343,6 +349,173 @@
     });
     // *************** END-MOUSE WHEEL ZOOM ***************
 
+    function createRichTextEditor() {
+        var overlay = document.createElement('div');
+        overlay.className = 'richtext-overlay';
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.innerHTML = [
+            '<div class="richtext-modal" role="dialog" aria-modal="true" aria-label="Edit node content">',
+            '    <div class="richtext-toolbar">',
+            '        <div class="richtext-toolbar-group">',
+            '            <button type="button" class="richtext-button" data-command="bold" aria-label="Bold">',
+            '                <span aria-hidden="true">B</span>',
+            '            </button>',
+            '            <button type="button" class="richtext-button" data-command="italic" aria-label="Italic">',
+            '                <span aria-hidden="true">I</span>',
+            '            </button>',
+            '        </div>',
+            '        <button type="button" class="richtext-close" aria-label="Close editor">',
+            '            <span aria-hidden="true">&times;</span>',
+            '        </button>',
+            '    </div>',
+            '    <div class="richtext-editor-wrapper">',
+            '        <div class="richtext-editor-area" contenteditable="true" spellcheck="true"></div>',
+            '    </div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(overlay);
+
+        var editorArea = overlay.querySelector('.richtext-editor-area');
+        var closeButton = overlay.querySelector('.richtext-close');
+        var commandButtons = overlay.querySelectorAll('.richtext-button');
+        var isOpen = false;
+        var pendingSave = null;
+
+        function open(options) {
+            if (!options)
+                options = {};
+            pendingSave = typeof options.onSave === 'function' ? options.onSave : null;
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+            editorArea.innerHTML = sanitizeHtml(options.initialValue || '');
+            isOpen = true;
+            var scheduleFocus = window.requestAnimationFrame || function(fn) {
+                return setTimeout(fn, 16);
+            };
+            scheduleFocus(function() {
+                focusEditor();
+            });
+            document.addEventListener('keydown', handleKeydown, true);
+        }
+
+        function close() {
+            if (!isOpen)
+                return;
+            commitChanges();
+            overlay.classList.remove('is-visible');
+            overlay.setAttribute('aria-hidden', 'true');
+            editorArea.innerHTML = '';
+            isOpen = false;
+            pendingSave = null;
+            document.removeEventListener('keydown', handleKeydown, true);
+        }
+
+        function focusEditor() {
+            editorArea.focus();
+            placeCaretAtEnd(editorArea);
+        }
+
+        function commitChanges() {
+            if (!pendingSave)
+                return;
+            var content = readEditorContent();
+            pendingSave(content);
+        }
+
+        function readEditorContent() {
+            var sanitized = sanitizeHtml(editorArea.innerHTML);
+            var temp = document.createElement('div');
+            temp.innerHTML = sanitized;
+            var textContent = temp.textContent.replace(/\u200B/g, '').trim();
+            if (!textContent)
+                return '';
+            return sanitized;
+        }
+
+        function handleKeydown(evt) {
+            if (!isOpen)
+                return;
+            if (evt.key === 'Escape') {
+                evt.preventDefault();
+                close();
+            }
+        }
+
+        function sanitizeHtml(inputHtml) {
+            var temp = document.createElement('div');
+            temp.innerHTML = inputHtml;
+
+            Array.prototype.slice.call(temp.getElementsByTagName('script')).forEach(function(node) {
+                if (node.parentNode)
+                    node.parentNode.removeChild(node);
+            });
+
+            Array.prototype.slice.call(temp.getElementsByTagName('*')).forEach(function(node) {
+                Array.prototype.slice.call(node.attributes).forEach(function(attr) {
+                    if (attr.name && attr.name.toLowerCase().indexOf('on') === 0)
+                        node.removeAttribute(attr.name);
+                });
+            });
+
+            return temp.innerHTML;
+        }
+
+        function placeCaretAtEnd(element) {
+            var range = document.createRange();
+            range.selectNodeContents(element);
+            range.collapse(false);
+            var selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        Array.prototype.forEach.call(commandButtons, function(button) {
+            var command = button.getAttribute('data-command');
+            button.addEventListener('mousedown', function(evt) {
+                evt.preventDefault();
+            });
+            button.addEventListener('click', function(evt) {
+                evt.preventDefault();
+                focusEditor();
+                document.execCommand(command, false, null);
+                commitChanges();
+            });
+        });
+
+        editorArea.addEventListener('input', function() {
+            if (!isOpen)
+                return;
+            commitChanges();
+        });
+
+        editorArea.addEventListener('blur', function() {
+            if (!isOpen)
+                return;
+            commitChanges();
+        });
+
+        if (closeButton) {
+            closeButton.addEventListener('click', function(evt) {
+                evt.preventDefault();
+                close();
+            });
+        }
+
+        overlay.addEventListener('click', function(evt) {
+            if (evt.target === overlay) {
+                evt.preventDefault();
+                close();
+            }
+        });
+
+        return {
+            open: function(options) {
+                if (isOpen)
+                    close();
+                open(options);
+            }
+        };
+    }
     function createNewNode() {
         let rect = paper.el.getBoundingClientRect();
         let centerX = rect.width / 2;
@@ -453,3 +626,5 @@
 
 
 })(joint, V);
+
+

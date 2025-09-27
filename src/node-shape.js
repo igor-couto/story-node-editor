@@ -99,8 +99,7 @@
                     </button>
 
                     <label class="node-label">
-                        <textarea placeholder="..." rows="6" @group-selector="field" class="node-textarea" data-attribute="content" style="pointer-events: auto;">
-                        </textarea>
+                        <div @group-selector="field" class="node-content-display" data-attribute="content" tabindex="0" style="pointer-events: auto;"></div>
                     </label>
 
                     <div class="choices-section">
@@ -240,6 +239,12 @@
                     passive: true
                 });
 
+            let contentDisplay = html.querySelector('.node-content-display');
+            if (contentDisplay) {
+                contentDisplay.addEventListener('click', this.onContentClick.bind(this));
+                contentDisplay.addEventListener('keydown', this.onContentKeydown.bind(this));
+            }
+
             this.paper.htmlContainer.appendChild(html);
             this.html = html;
             this.fields = fields;
@@ -279,17 +284,47 @@
             this.model.remove();
         },
 
+        onContentClick: function(evt) {
+            evt.preventDefault();
+            evt.stopPropagation();
+
+            if (!window.storyNodeEditor || !window.storyNodeEditor.openTextEditor)
+                return;
+
+            let initialValue = this.model.prop(['fields', 'content']) || '';
+            let self = this;
+            window.storyNodeEditor.openTextEditor({
+                initialValue: initialValue,
+                onSave: function(newValue) {
+                    self.model.prop(['fields', 'content'], newValue);
+                }
+            });
+        },
+
+        onContentKeydown: function(evt) {
+            if (evt.key === 'Enter' || evt.key === ' ') {
+                evt.preventDefault();
+                this.onContentClick(evt);
+            }
+        },
+
         updateFields: function() {
             this.fields.forEach(function(field) {
                 let attribute = field.dataset.attribute;
                 let value = this.model.prop(['fields', attribute]);
                 switch (field.tagName.toUpperCase()) {
-                    case 'TEXTAREA':
-                        field.value = value;
-                        if (value)
-                            field.classList.remove('field-empty');
-                        else
-                            field.classList.add('field-empty');
+                    case 'DIV':
+                        if (field.classList.contains('node-content-display')) {
+                            if (value) {
+                                field.innerHTML = value;
+                                field.classList.remove('field-empty');
+                            } else {
+                                field.innerHTML = '<span class="node-content-placeholder">...</span>';
+                                field.classList.add('field-empty');
+                            }
+                        } else if (attribute) {
+                            field.dataset[attribute] = value;
+                        }
                         break;
                     case 'LABEL':
                         field.textContent = value;
@@ -302,8 +337,12 @@
                         else
                             field.classList.add('field-empty');
                         break;
-                    case 'DIV':
-                        field.dataset[attribute] = value;
+                    case 'TEXTAREA':
+                        field.value = value;
+                        if (value)
+                            field.classList.remove('field-empty');
+                        else
+                            field.classList.add('field-empty');
                         break;
                 }
             }.bind(this));
@@ -446,3 +485,4 @@
 
     });
 })(joint, joint.util, V);
+
