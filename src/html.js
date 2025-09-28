@@ -401,6 +401,7 @@
             pendingSave = typeof options.onSave === 'function' ? options.onSave : null;
             overlay.classList.add('is-visible');
             overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('richtext-open');
             editorArea.innerHTML = sanitizeHtml(options.initialValue || '');
             isOpen = true;
             storedSelection = null;
@@ -421,6 +422,7 @@
             commitChanges();
             overlay.classList.remove('is-visible');
             overlay.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('richtext-open');
             editorArea.innerHTML = '';
             isOpen = false;
             pendingSave = null;
@@ -749,6 +751,4 @@
 
 
 })(joint, V);
-
-
 
