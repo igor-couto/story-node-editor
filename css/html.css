@@ -267,6 +267,20 @@ body.richtext-open .node-label {
     outline: none;
 }
 
+.richtext-button:disabled {
+    border-color: transparent;
+    background-color: transparent;
+    color: #9E9E9E;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.richtext-button:disabled:hover,
+.richtext-button:disabled:focus {
+    border-color: transparent;
+    background-color: transparent;
+}
+
 .richtext-button.is-active {
     border-color: #0D8DE9;
     background-color: rgba(13, 141, 233, 0.18);
@@ -342,3 +356,30 @@ body.richtext-open .node-label {
     outline: none;
 }
 
+.richtext-markdown-area {
+    flex: 1;
+    min-height: 0;
+    border: 1px solid #DCDCDC;
+    border-radius: 8px;
+    padding: 25px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: #222222;
+    resize: none;
+    font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    outline: none;
+    display: none;
+}
+
+.richtext-markdown-area:focus {
+    border-color: #DCDCDC;
+    box-shadow: none;
+}
+
+.richtext-modal.is-markdown-mode .richtext-editor-area {
+    display: none;
+}
+
+.richtext-modal.is-markdown-mode .richtext-markdown-area {
+    display: block;
+}

@@ -109,8 +109,66 @@
     paper.el.appendChild(htmlContainer);
     paper.htmlContainer = htmlContainer;
 
-    var richTextEditor = createRichTextEditor();
+    var turndownService = window.TurndownService ? new window.TurndownService({
+        headingStyle: 'atx',
+        codeBlockStyle: 'fenced'
+    }) : null;
+
+    if (turndownService) {
+        turndownService.keep(['u']);
+        turndownService.addRule('strike', {
+            filter: ['del', 's', 'strike'],
+            replacement: function(content) {
+                return '~~' + content + '~~';
+            }
+        });
+    }
+
+    function sanitizeHtmlContent(inputHtml) {
+        var temp = document.createElement('div');
+        temp.innerHTML = inputHtml;
+
+        Array.prototype.slice.call(temp.getElementsByTagName('script')).forEach(function(node) {
+            if (node.parentNode)
+                node.parentNode.removeChild(node);
+        });
+
+        Array.prototype.slice.call(temp.getElementsByTagName('*')).forEach(function(node) {
+            Array.prototype.slice.call(node.attributes).forEach(function(attr) {
+                if (attr.name && attr.name.toLowerCase().indexOf('on') === 0)
+                    node.removeAttribute(attr.name);
+            });
+        });
+
+        return temp.innerHTML;
+    }
+
+    function convertMarkdownToHtml(markdownText) {
+        if (!markdownText)
+            return '';
+        if (window.marked && typeof window.marked.parse === 'function') {
+            var rendered = window.marked.parse(markdownText);
+            return sanitizeHtmlContent(rendered);
+        }
+        var fallback = document.createElement('div');
+        fallback.textContent = markdownText;
+        return fallback.innerHTML.replace(/\n/g, '<br>');
+    }
+
+    function convertHtmlToMarkdown(htmlText) {
+        if (!htmlText)
+            return '';
+        if (turndownService)
+            return turndownService.turndown(htmlText);
+        return htmlText;
+    }
+
     window.storyNodeEditor = window.storyNodeEditor || {};
+    window.storyNodeEditor.renderMarkdown = function(markdownText) {
+        return convertMarkdownToHtml(markdownText || '');
+    };
+
+    var richTextEditor = createRichTextEditor();
     window.storyNodeEditor.openTextEditor = function(options) {
         richTextEditor.open(options || {});
     };
@@ -370,20 +428,29 @@
             '                <span aria-hidden="true">S</span>',
             '            </button>',
             '        </div>',
-            '        <button type="button" class="richtext-close" aria-label="Close editor">',
-            '            <span aria-hidden="true">&times;</span>',
-            '        </button>',
+            '        <div class="richtext-toolbar-group">',
+            '            <button type="button" class="richtext-button richtext-toggle" data-mode="markdown" aria-label="Switch to markdown view" aria-pressed="false">',
+            '                <span aria-hidden="true">MD</span>',
+            '            </button>',
+            '            <button type="button" class="richtext-close" aria-label="Close editor">',
+            '                <span aria-hidden="true">&times;</span>',
+            '            </button>',
+            '        </div>',
             '    </div>',
             '    <div class="richtext-editor-wrapper">',
             '        <div class="richtext-editor-area" contenteditable="true" spellcheck="true"></div>',
+            '        <textarea class="richtext-markdown-area" spellcheck="false"></textarea>',
             '    </div>',
             '</div>'
         ].join('');
         document.body.appendChild(overlay);
 
+        var modal = overlay.querySelector('.richtext-modal');
         var editorArea = overlay.querySelector('.richtext-editor-area');
+        var markdownArea = overlay.querySelector('.richtext-markdown-area');
         var closeButton = overlay.querySelector('.richtext-close');
-        var commandButtons = overlay.querySelectorAll('.richtext-button');
+        var toggleButton = overlay.querySelector('.richtext-toggle');
+        var commandButtons = overlay.querySelectorAll('.richtext-button[data-command]');
         var buttonByCommand = {};
         Array.prototype.forEach.call(commandButtons, function(button) {
             var command = button.getAttribute('data-command');
@@ -394,17 +461,23 @@
         var isOpen = false;
         var pendingSave = null;
         var storedSelection = null;
+        var isMarkdownMode = false;
+        var lastSavedContent = null;
 
         function open(options) {
-            if (!options)
-                options = {};
+            options = options || {};
             pendingSave = typeof options.onSave === 'function' ? options.onSave : null;
+            var initialMarkdown = typeof options.initialValue === 'string' ? options.initialValue : '';
+            initialMarkdown = normalizeLineEndings(initialMarkdown);
             overlay.classList.add('is-visible');
             overlay.setAttribute('aria-hidden', 'false');
             document.body.classList.add('richtext-open');
-            editorArea.innerHTML = sanitizeHtml(options.initialValue || '');
+            markdownArea.value = initialMarkdown;
+            setRichTextContentFromMarkdown(initialMarkdown);
             isOpen = true;
             storedSelection = null;
+            lastSavedContent = initialMarkdown;
+            setMarkdownMode(false, true);
             var scheduleFocus = window.requestAnimationFrame || function(fn) {
                 return setTimeout(fn, 16);
             };
@@ -424,42 +497,75 @@
             overlay.setAttribute('aria-hidden', 'true');
             document.body.classList.remove('richtext-open');
             editorArea.innerHTML = '';
+            markdownArea.value = '';
             isOpen = false;
             pendingSave = null;
             storedSelection = null;
+            lastSavedContent = null;
+            setMarkdownMode(false, true);
             document.removeEventListener('keydown', handleKeydown, true);
             document.removeEventListener('selectionchange', handleSelectionChange, true);
         }
 
+        function normalizeLineEndings(text) {
+            if (!text)
+                return '';
+            return text.replace(/\r\n/g, '\n');
+        }
+
         function focusEditor() {
+            var target = isMarkdownMode ? markdownArea : editorArea;
             try {
-                editorArea.focus({ preventScroll: true });
+                target.focus({ preventScroll: true });
             } catch (err) {
-                editorArea.focus();
+                target.focus();
             }
         }
 
         function moveCaretToEnd() {
             focusEditor();
-            placeCaretAtEnd(editorArea);
-            saveSelection();
+            if (isMarkdownMode) {
+                var valueLength = markdownArea.value.length;
+                markdownArea.setSelectionRange(valueLength, valueLength);
+            } else {
+                placeCaretAtEnd(editorArea);
+                saveSelection();
+            }
+        }
+
+        function setRichTextContentFromMarkdown(markdownValue) {
+            editorArea.innerHTML = convertMarkdownToHtml(markdownValue || '');
+        }
+
+        function readMarkdownFromRichText() {
+            var sanitized = sanitizeHtmlContent(editorArea.innerHTML);
+            var temp = document.createElement('div');
+            temp.innerHTML = sanitized;
+            var textContent = temp.textContent.replace(/\u200B/g, '').trim();
+            if (!textContent)
+                return '';
+            return convertHtmlToMarkdown(sanitized);
+        }
+
+        function readEditorContent() {
+            if (isMarkdownMode) {
+                var rawMarkdown = normalizeLineEndings(markdownArea.value || '');
+                var trimmedText = rawMarkdown.replace(/\u200B/g, '').trim();
+                return trimmedText ? rawMarkdown : '';
+            }
+            return readMarkdownFromRichText();
         }
 
         function commitChanges() {
             if (!pendingSave)
                 return;
             var content = readEditorContent();
+            if (content && content !== '')
+                content = normalizeLineEndings(content);
+            if (content === lastSavedContent)
+                return;
+            lastSavedContent = content;
             pendingSave(content);
-        }
-
-        function readEditorContent() {
-            var sanitized = sanitizeHtml(editorArea.innerHTML);
-            var temp = document.createElement('div');
-            temp.innerHTML = sanitized;
-            var textContent = temp.textContent.replace(/\u200B/g, '').trim();
-            if (!textContent)
-                return '';
-            return sanitized;
         }
 
         function handleKeydown(evt) {
@@ -469,25 +575,6 @@
                 evt.preventDefault();
                 close();
             }
-        }
-
-        function sanitizeHtml(inputHtml) {
-            var temp = document.createElement('div');
-            temp.innerHTML = inputHtml;
-
-            Array.prototype.slice.call(temp.getElementsByTagName('script')).forEach(function(node) {
-                if (node.parentNode)
-                    node.parentNode.removeChild(node);
-            });
-
-            Array.prototype.slice.call(temp.getElementsByTagName('*')).forEach(function(node) {
-                Array.prototype.slice.call(node.attributes).forEach(function(attr) {
-                    if (attr.name && attr.name.toLowerCase().indexOf('on') === 0)
-                        node.removeAttribute(attr.name);
-                });
-            });
-
-            return temp.innerHTML;
         }
 
         function placeCaretAtEnd(element) {
@@ -500,6 +587,10 @@
         }
 
         function saveSelection() {
+            if (isMarkdownMode) {
+                storedSelection = null;
+                return;
+            }
             var selection = window.getSelection();
             if (!selection || selection.rangeCount === 0) {
                 storedSelection = null;
@@ -513,7 +604,7 @@
         }
 
         function restoreSelection() {
-            if (!storedSelection)
+            if (isMarkdownMode || !storedSelection)
                 return;
             var selection = window.getSelection();
             selection.removeAllRanges();
@@ -521,8 +612,12 @@
         }
 
         function updateToolbarStates() {
-            if (!isOpen)
+            if (!isOpen || isMarkdownMode) {
+                Object.keys(buttonByCommand).forEach(function(command) {
+                    setButtonState(command, false);
+                });
                 return;
+            }
             var selection = window.getSelection();
             var withinEditor = selection && selection.rangeCount && editorArea.contains(selection.anchorNode);
             setButtonState('bold', withinEditor && document.queryCommandState && document.queryCommandState('bold'));
@@ -549,13 +644,15 @@
         }
 
         function trackSelection() {
-            if (!isOpen)
+            if (!isOpen || isMarkdownMode)
                 return;
             saveSelection();
             updateToolbarStates();
         }
 
         function insertText(text) {
+            if (isMarkdownMode)
+                return;
             if (document.queryCommandSupported && document.queryCommandSupported('insertText')) {
                 if (document.execCommand('insertText', false, text))
                     return;
@@ -573,6 +670,50 @@
             selection.addRange(range);
         }
 
+        function applyModeState() {
+            modal.classList.toggle('is-markdown-mode', isMarkdownMode);
+            if (toggleButton) {
+                toggleButton.setAttribute('aria-pressed', isMarkdownMode ? 'true' : 'false');
+                toggleButton.setAttribute('data-mode', isMarkdownMode ? 'richtext' : 'markdown');
+                toggleButton.setAttribute('aria-label', isMarkdownMode ? 'Switch to rich text view' : 'Switch to markdown view');
+                toggleButton.title = isMarkdownMode ? 'Switch to rich text view' : 'Switch to markdown view';
+                var label = toggleButton.querySelector('span');
+                if (label)
+                    label.textContent = isMarkdownMode ? 'Aa' : 'MD';
+            }
+            Array.prototype.forEach.call(commandButtons, function(button) {
+                button.disabled = isMarkdownMode;
+            });
+        }
+
+        function setMarkdownMode(nextMode, suppressContentSync) {
+            if (nextMode === isMarkdownMode) {
+                applyModeState();
+                return;
+            }
+            if (!nextMode && !suppressContentSync)
+                setRichTextContentFromMarkdown(markdownArea.value || '');
+            if (nextMode) {
+                storedSelection = null;
+            }
+            isMarkdownMode = nextMode;
+            applyModeState();
+            if (!isMarkdownMode)
+                updateToolbarStates();
+        }
+
+        function toggleEditorMode() {
+            if (isMarkdownMode) {
+                setMarkdownMode(false);
+            } else {
+                var markdownFromRichText = readMarkdownFromRichText();
+                markdownArea.value = normalizeLineEndings(markdownFromRichText);
+                setMarkdownMode(true, true);
+            }
+            moveCaretToEnd();
+            commitChanges();
+        }
+
         Array.prototype.forEach.call(commandButtons, function(button) {
             var command = button.getAttribute('data-command');
             button.addEventListener('mousedown', function(evt) {
@@ -580,6 +721,8 @@
             });
             button.addEventListener('click', function(evt) {
                 evt.preventDefault();
+                if (isMarkdownMode)
+                    return;
                 focusEditor();
                 restoreSelection();
                 document.execCommand(command, false, null);
@@ -589,6 +732,8 @@
         });
 
         editorArea.addEventListener('keydown', function(evt) {
+            if (!isOpen || isMarkdownMode)
+                return;
             if (evt.key === 'Tab') {
                 evt.preventDefault();
                 restoreSelection();
@@ -599,7 +744,7 @@
         });
 
         editorArea.addEventListener('input', function() {
-            if (!isOpen)
+            if (!isOpen || isMarkdownMode)
                 return;
             commitChanges();
             trackSelection();
@@ -610,12 +755,48 @@
         editorArea.addEventListener('mouseup', trackSelection);
 
         editorArea.addEventListener('blur', function() {
-            if (!isOpen)
+            if (!isOpen || isMarkdownMode)
                 return;
             saveSelection();
             updateToolbarStates();
             commitChanges();
         });
+
+        markdownArea.addEventListener('input', function() {
+            if (!isOpen || !isMarkdownMode)
+                return;
+            commitChanges();
+        });
+
+        markdownArea.addEventListener('keydown', function(evt) {
+            if (!isOpen || !isMarkdownMode)
+                return;
+            if (evt.key === 'Tab') {
+                evt.preventDefault();
+                var start = markdownArea.selectionStart;
+                var end = markdownArea.selectionEnd;
+                var value = markdownArea.value;
+                markdownArea.value = value.substring(0, start) + '    ' + value.substring(end);
+                markdownArea.selectionStart = markdownArea.selectionEnd = start + 4;
+                commitChanges();
+            }
+        });
+
+        markdownArea.addEventListener('blur', function() {
+            if (!isOpen || !isMarkdownMode)
+                return;
+            commitChanges();
+        });
+
+        if (toggleButton) {
+            toggleButton.addEventListener('mousedown', function(evt) {
+                evt.preventDefault();
+            });
+            toggleButton.addEventListener('click', function(evt) {
+                evt.preventDefault();
+                toggleEditorMode();
+            });
+        }
 
         if (closeButton) {
             closeButton.addEventListener('click', function(evt) {

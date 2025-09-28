@@ -316,7 +316,10 @@
                     case 'DIV':
                         if (field.classList.contains('node-content-display')) {
                             if (value) {
-                                field.innerHTML = value;
+                                var rendered = value;
+                                if (window.storyNodeEditor && typeof window.storyNodeEditor.renderMarkdown === 'function')
+                                    rendered = window.storyNodeEditor.renderMarkdown(value);
+                                field.innerHTML = rendered;
                                 field.classList.remove('field-empty');
                             } else {
                                 field.innerHTML = '<span class="node-content-placeholder">...</span>';
@@ -485,4 +488,3 @@
 
     });
 })(joint, joint.util, V);
-
