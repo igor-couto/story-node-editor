@@ -48,11 +48,28 @@ body.richtext-open .node-label {
     padding: 8px 0 0 0;
     cursor: url('../assets/default.png'), default;
 }
+
+.node-title-display {
+    width: 85%;
+    margin: 16px 6% 0 4%;
+    font-size: 16px;
+    font-weight: 600;
+    color: #222222;
+    line-height: 1.3;
+    min-height: 1.3em;
+    overflow-wrap: anywhere;
+    cursor: url('../assets/default.png'), default;
+}
+
+.node-title-display.field-empty {
+    min-height: 1.3em;
+}
+
 .node-content-display {
     width: 85%;
     margin-left: 4%;
     margin-right: 6%;
-    margin-top: 40px;
+    margin-top: 16px;
     margin-bottom: 20px;
     padding: 8px 10px;
     background: #FFFFFF;
@@ -229,6 +246,42 @@ body.richtext-open .node-label {
     font-family: inherit;
 }
 
+.richtext-title-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 20px 24px 12px 24px;
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #DCDCDC;
+}
+
+.richtext-title-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6B6B6B;
+}
+
+.richtext-title-input {
+    font-size: 18px;
+    line-height: 1.3;
+    padding: 10px 12px;
+    border: 1px solid #C8C8C8;
+    border-radius: 6px;
+    background-color: #FFFFFF;
+    color: #222222;
+}
+
+.richtext-title-input:focus {
+    border-color: #0D8DE9;
+    box-shadow: 0 0 0 1px #0D8DE9 inset;
+    outline: none;
+}
+
+.richtext-title-input::placeholder {
+    color: #9A9A9A;
+}
 .richtext-toolbar {
     display: flex;
     align-items: center;
@@ -383,3 +436,5 @@ body.richtext-open .node-label {
 .richtext-modal.is-markdown-mode .richtext-markdown-area {
     display: block;
 }
+
+

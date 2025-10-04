@@ -8,6 +8,7 @@
                 height: 228
             },
             fields: {
+                title: '',
                 content: '',
                 choices: []
             },
@@ -97,6 +98,8 @@
                     <button class="delete-button">
                         <img src="assets/delete-icon.svg" alt="Delete" />
                     </button>
+
+                    <div @group-selector="field" class="node-title-display" data-attribute="title"></div>
 
                     <label class="node-label">
                         <div @group-selector="field" class="node-content-display" data-attribute="content" tabindex="0" style="pointer-events: auto;"></div>
@@ -239,6 +242,12 @@
                     passive: true
                 });
 
+            let titleDisplay = html.querySelector('.node-title-display');
+            if (titleDisplay)
+                titleDisplay.addEventListener('click', function(evt) {
+                    evt.preventDefault();
+                    evt.stopPropagation();
+                });
             let contentDisplay = html.querySelector('.node-content-display');
             if (contentDisplay) {
                 contentDisplay.addEventListener('click', this.onContentClick.bind(this));
@@ -291,12 +300,21 @@
             if (!window.storyNodeEditor || !window.storyNodeEditor.openTextEditor)
                 return;
 
-            let initialValue = this.model.prop(['fields', 'content']) || '';
+            let initialContent = this.model.prop(['fields', 'content']) || '';
+            let initialTitle = this.model.prop(['fields', 'title']) || '';
             let self = this;
             window.storyNodeEditor.openTextEditor({
-                initialValue: initialValue,
-                onSave: function(newValue) {
-                    self.model.prop(['fields', 'content'], newValue);
+                initialContent: initialContent,
+                initialTitle: initialTitle,
+                onSave: function(result) {
+                    if (result && typeof result === 'object') {
+                        var updatedContent = typeof result.content === 'string' ? result.content : '';
+                        var updatedTitle = typeof result.title === 'string' ? result.title.trim() : '';
+                        self.model.prop(['fields', 'content'], updatedContent);
+                        self.model.prop(['fields', 'title'], updatedTitle);
+                    } else if (typeof result === 'string') {
+                        self.model.prop(['fields', 'content'], result);
+                    }
                 }
             });
         },
@@ -323,6 +341,14 @@
                                 field.classList.remove('field-empty');
                             } else {
                                 field.innerHTML = '<span class="node-content-placeholder">...</span>';
+                                field.classList.add('field-empty');
+                            }
+                        } else if (field.classList.contains('node-title-display')) {
+                            if (value) {
+                                field.textContent = value;
+                                field.classList.remove('field-empty');
+                            } else {
+                                field.textContent = '';
                                 field.classList.add('field-empty');
                             }
                         } else if (attribute) {
@@ -488,3 +514,4 @@
 
     });
 })(joint, joint.util, V);
+

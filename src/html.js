@@ -412,7 +412,11 @@
         overlay.className = 'richtext-overlay';
         overlay.setAttribute('aria-hidden', 'true');
         overlay.innerHTML = [
-            '<div class="richtext-modal" role="dialog" aria-modal="true" aria-label="Edit node content">',
+            '<div class="richtext-modal" role="dialog" aria-modal="true" aria-label="Edit node">',
+            '    <div class="richtext-title-row">',
+            '        <label class="richtext-title-label" for="richtext-title-input">Title</label>',
+            '        <input type="text" id="richtext-title-input" class="richtext-title-input" placeholder="Optional title" maxlength="120" />',
+            '    </div>',
             '    <div class="richtext-toolbar">',
             '        <div class="richtext-toolbar-group">',
             '            <button type="button" class="richtext-button" data-command="bold" aria-label="Bold">',
@@ -448,6 +452,7 @@
         var modal = overlay.querySelector('.richtext-modal');
         var editorArea = overlay.querySelector('.richtext-editor-area');
         var markdownArea = overlay.querySelector('.richtext-markdown-area');
+        var titleInput = overlay.querySelector('.richtext-title-input');
         var closeButton = overlay.querySelector('.richtext-close');
         var toggleButton = overlay.querySelector('.richtext-toggle');
         var commandButtons = overlay.querySelectorAll('.richtext-button[data-command]');
@@ -463,12 +468,24 @@
         var storedSelection = null;
         var isMarkdownMode = false;
         var lastSavedContent = null;
+        var lastSavedTitle = null;
 
         function open(options) {
             options = options || {};
             pendingSave = typeof options.onSave === 'function' ? options.onSave : null;
-            var initialMarkdown = typeof options.initialValue === 'string' ? options.initialValue : '';
+            var initialMarkdown = '';
+            if (typeof options.initialContent === 'string')
+                initialMarkdown = options.initialContent;
+            else if (typeof options.initialValue === 'string')
+                initialMarkdown = options.initialValue;
             initialMarkdown = normalizeLineEndings(initialMarkdown);
+            var initialTitle = '';
+            if (typeof options.initialTitle === 'string')
+                initialTitle = options.initialTitle;
+            else if (typeof options.title === 'string')
+                initialTitle = options.title;
+            if (titleInput)
+                titleInput.value = initialTitle;
             overlay.classList.add('is-visible');
             overlay.setAttribute('aria-hidden', 'false');
             document.body.classList.add('richtext-open');
@@ -477,6 +494,7 @@
             isOpen = true;
             storedSelection = null;
             lastSavedContent = initialMarkdown;
+            lastSavedTitle = (initialTitle || '').trim();
             setMarkdownMode(false, true);
             var scheduleFocus = window.requestAnimationFrame || function(fn) {
                 return setTimeout(fn, 16);
@@ -498,10 +516,13 @@
             document.body.classList.remove('richtext-open');
             editorArea.innerHTML = '';
             markdownArea.value = '';
+            if (titleInput)
+                titleInput.value = '';
             isOpen = false;
             pendingSave = null;
             storedSelection = null;
             lastSavedContent = null;
+            lastSavedTitle = null;
             setMarkdownMode(false, true);
             document.removeEventListener('keydown', handleKeydown, true);
             document.removeEventListener('selectionchange', handleSelectionChange, true);
@@ -562,10 +583,20 @@
             var content = readEditorContent();
             if (content && content !== '')
                 content = normalizeLineEndings(content);
-            if (content === lastSavedContent)
+            else
+                content = '';
+            var title = '';
+            if (titleInput)
+                title = titleInput.value || '';
+            title = title.trim();
+            if (content === lastSavedContent && title === lastSavedTitle)
                 return;
             lastSavedContent = content;
-            pendingSave(content);
+            lastSavedTitle = title;
+            pendingSave({
+                content: content,
+                title: title
+            });
         }
 
         function handleKeydown(evt) {
@@ -837,7 +868,9 @@
                 y: centerPoint.y
             },
             fields: {
-                content: ''
+                title: '',
+                content: '',
+                choices: []
             }
         });
         newNode.updateInPorts();
@@ -858,12 +891,14 @@
         nodes.forEach(node => {
             const nodeId = node.id;
             const nodePosition = node.position();
+            const nodeTitle = node.prop(['fields', 'title']) || '';
             const nodeText = node.prop(['fields', 'content']) || '';
             const nodeChoices = node.prop(['fields', 'choices']) || [];
 
             // Prepare the basic node data
             const nodeData = {
                 id: nodeId,
+                title: nodeTitle,
                 text: nodeText,
                 position: {
                     x: nodePosition.x,
