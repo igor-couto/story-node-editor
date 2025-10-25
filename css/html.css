@@ -437,4 +437,228 @@ body.richtext-open .node-label {
     display: block;
 }
 
+.code-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.45);
+    z-index: 2050;
+    padding: 32px;
+    pointer-events: auto;
+}
 
+.code-overlay.is-visible {
+    display: flex;
+}
+
+.code-modal {
+    width: min(720px, 92vw);
+    max-height: 85vh;
+    background-color: #FFFFFF;
+    border-radius: 12px;
+    border: 1px solid #DCDCDC;
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: inherit;
+}
+
+.code-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid #DCDCDC;
+    background-color: #F7F7F7;
+}
+
+.code-modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #222222;
+}
+
+.code-modal-close {
+    background: none;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    line-height: 1;
+    color: #3A3A3A;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.code-modal-close:hover,
+.code-modal-close:focus {
+    background-color: rgba(13, 141, 233, 0.12);
+    color: #0D8DE9;
+    outline: none;
+}
+
+.code-modal-body {
+    flex: 1;
+    overflow: auto;
+    background-color: #1E1E1E;
+}
+
+.code-modal-pre {
+    margin: 0;
+    padding: 24px;
+    color: #E6E6E6;
+    font-size: 13px;
+    line-height: 1.6;
+    font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    white-space: pre;
+}
+
+.code-modal-code {
+    display: block;
+    white-space: pre;
+}
+
+body.code-view-open {
+    cursor: default;
+}
+
+.help-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.45);
+    z-index: 2050;
+    padding: 32px;
+    pointer-events: auto;
+}
+
+.help-overlay.is-visible {
+    display: flex;
+}
+
+.help-modal {
+    width: min(640px, 92vw);
+    max-height: 85vh;
+    background-color: #FFFFFF;
+    border-radius: 12px;
+    border: 1px solid #DCDCDC;
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: inherit;
+}
+
+.help-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid #DCDCDC;
+    background-color: #F7F7F7;
+}
+
+.help-modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #222222;
+}
+
+.help-modal-close {
+    background: none;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    line-height: 1;
+    color: #3A3A3A;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.help-modal-close:hover,
+.help-modal-close:focus {
+    background-color: rgba(13, 141, 233, 0.12);
+    color: #0D8DE9;
+    outline: none;
+}
+
+.help-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    color: #2E2E2E;
+}
+
+.help-modal-note {
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    border-left: 3px solid #0D8DE9;
+    background-color: rgba(13, 141, 233, 0.12);
+    color: #0D3A5C;
+    border-radius: 6px;
+}
+
+.help-section + .help-section {
+    margin-top: 20px;
+}
+
+.help-section-title {
+    margin: 0 0 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1F1F1F;
+}
+
+.help-shortcuts-list,
+.help-info-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.help-shortcuts-list li,
+.help-info-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.help-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 8px;
+    min-width: 32px;
+    border-radius: 6px;
+    background-color: #F0F0F0;
+    border: 1px solid #D1D1D1;
+    font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #111111;
+}
+
+.help-shortcut-desc {
+    flex: 1;
+}
+
+body.help-view-open {
+    cursor: default;
+}

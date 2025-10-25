@@ -169,8 +169,16 @@
     };
 
     var richTextEditor = createRichTextEditor();
+    var codeViewer = createCodeViewer();
+    var helpModal = createHelpModal();
     window.storyNodeEditor.openTextEditor = function(options) {
         richTextEditor.open(options || {});
+    };
+    window.storyNodeEditor.openCodeViewer = function(options) {
+        codeViewer.open(options || {});
+    };
+    window.storyNodeEditor.openHelp = function(options) {
+        helpModal.open(options || {});
     };
 
     const magnetAvailabilityHighlighter = {
@@ -296,8 +304,7 @@
             }
 
             if (evt.key === 'f' || evt.key === 'F') {
-                paper.scaleContentToFit();
-                zoomLevel = paper.scale().sx;
+                fitPaperToContent();
             }
 
             if (evt.key === 'n' || evt.key === 'N') {
@@ -322,6 +329,11 @@
     // *************** TOOLBAR ***************
     let zoomLevel = 1;
 
+    function fitPaperToContent() {
+        paper.scaleContentToFit();
+        zoomLevel = paper.scale().sx;
+    }
+
     let center = paper.getArea().center();
 
     document.getElementById('zoom-in').addEventListener('click', function() {
@@ -334,6 +346,28 @@
     document.getElementById('zoom-out').addEventListener('click', function() {
         zoomLevel = Math.max(0.2, zoomLevel - 0.2);
         paper.scaleUniformAtPoint(zoomLevel, center);
+    }, {
+        passive: true
+    });
+
+    document.getElementById('view').addEventListener('click', function() {
+        fitPaperToContent();
+    }, {
+        passive: true
+    });
+
+    document.getElementById('code').addEventListener('click', function() {
+        const payload = collectDiagramData();
+        codeViewer.open({
+            title: 'Diagram JSON',
+            data: payload
+        });
+    }, {
+        passive: true
+    });
+
+    document.getElementById('help').addEventListener('click', function() {
+        helpModal.open();
     }, {
         passive: true
     });
@@ -852,6 +886,254 @@
         };
     }
 
+    function createCodeViewer() {
+        var overlay = document.createElement('div');
+        overlay.className = 'code-overlay';
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.innerHTML = [
+            '<div class="code-modal" role="dialog" aria-modal="true" aria-label="Diagram JSON view">',
+            '    <div class="code-modal-header">',
+            '        <span class="code-modal-title">Diagram JSON</span>',
+            '        <button type="button" class="code-modal-close" aria-label="Close code view">',
+            '            <span aria-hidden="true">&times;</span>',
+            '        </button>',
+            '    </div>',
+            '    <div class="code-modal-body">',
+            '        <pre class="code-modal-pre"><code class="code-modal-code"></code></pre>',
+            '    </div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(overlay);
+
+        var closeButton = overlay.querySelector('.code-modal-close');
+        var titleElement = overlay.querySelector('.code-modal-title');
+        var codeElement = overlay.querySelector('.code-modal-code');
+
+        var isOpen = false;
+
+        function setContent(text) {
+            if (codeElement)
+                codeElement.textContent = text || '';
+        }
+
+        function open(options) {
+            options = options || {};
+            var title = typeof options.title === 'string' && options.title.trim() ? options.title.trim() : 'Diagram JSON';
+            var text = '';
+            if (typeof options.jsonText === 'string')
+                text = options.jsonText;
+            else if (options.data !== undefined) {
+                try {
+                    text = JSON.stringify(options.data, null, 2);
+                } catch (error) {
+                    text = 'Unable to serialize data: ' + error.message;
+                }
+            }
+
+            if (titleElement)
+                titleElement.textContent = title;
+            setContent(text);
+
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('code-view-open');
+            isOpen = true;
+
+            document.addEventListener('keydown', handleKeydown, true);
+
+            if (closeButton) {
+                try {
+                    closeButton.focus({
+                        preventScroll: true
+                    });
+                } catch (err) {
+                    closeButton.focus();
+                }
+            }
+        }
+
+        function close() {
+            if (!isOpen)
+                return;
+
+            document.removeEventListener('keydown', handleKeydown, true);
+
+            overlay.classList.remove('is-visible');
+            overlay.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('code-view-open');
+
+            setContent('');
+            isOpen = false;
+        }
+
+        function handleKeydown(evt) {
+            if (!isOpen)
+                return;
+            if (evt.key === 'Escape') {
+                evt.preventDefault();
+                close();
+            }
+        }
+
+        if (closeButton) {
+            closeButton.addEventListener('click', function(evt) {
+                evt.preventDefault();
+                close();
+            });
+        }
+
+        overlay.addEventListener('click', function(evt) {
+            if (evt.target === overlay) {
+                evt.preventDefault();
+                close();
+            }
+        });
+
+        return {
+            open: function(options) {
+                if (isOpen)
+                    close();
+                open(options || {});
+            },
+            close: close
+        };
+    }
+
+    function createHelpModal() {
+        var overlay = document.createElement('div');
+        overlay.className = 'help-overlay';
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.innerHTML = [
+            '<div class="help-modal" role="dialog" aria-modal="true" aria-label="Editor help and shortcuts">',
+            '    <div class="help-modal-header">',
+            '        <span class="help-modal-title">Story Node Editor Help</span>',
+            '        <button type="button" class="help-modal-close" aria-label="Close help window">',
+            '            <span aria-hidden="true">&times;</span>',
+            '        </button>',
+            '    </div>',
+            '    <div class="help-modal-body">',
+            '        <p class="help-modal-note" hidden></p>',
+            '        <section class="help-section">',
+            '            <h2 class="help-section-title">Keyboard Shortcuts</h2>',
+            '            <ul class="help-shortcuts-list">',
+            '                <li><span class="help-kbd">F</span><span class="help-shortcut-desc">Fit the entire diagram inside the viewport.</span></li>',
+            '                <li><span class="help-kbd">C</span><span class="help-shortcut-desc">Reset zoom and pan to the default position.</span></li>',
+            '                <li><span class="help-kbd">N</span><span class="help-shortcut-desc">Create a new empty node centered on the canvas.</span></li>',
+            '                <li><span class="help-kbd">+</span>/<span class="help-kbd">-</span><span class="help-shortcut-desc">Incrementally zoom in or out.</span></li>',
+            '                <li><span class="help-kbd">Ctrl / Middle Button + Drag</span><span class="help-shortcut-desc">Pan around the canvas.</span></li>',
+            '            </ul>',
+            '        </section>',
+            '        <section class="help-section">',
+            '            <h2 class="help-section-title">Working with Nodes</h2>',
+            '            <ul class="help-info-list">',
+            '                <li>Select a node and click its title or content area to edit details.</li>',
+            '                <li>Use the “Choices” area to add branching options; each choice creates its own link port.</li>',
+            '                <li>Drag from an output port to connect to another node’s top port.</li>',
+            '                <li>Delete a node with the trash icon in the top-right corner.</li>',
+            '            </ul>',
+            '        </section>',
+            '        <section class="help-section">',
+            '            <h2 class="help-section-title">Exporting</h2>',
+            '            <ul class="help-info-list">',
+            '                <li>Use the “Code” button to view the JSON representation of your story graph.</li>',
+            '                <li>The “Publish” button will send publish the story in the website.</li>',
+            '            </ul>',
+            '        </section>',
+            '    </div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(overlay);
+
+        var closeButton = overlay.querySelector('.help-modal-close');
+        var titleElement = overlay.querySelector('.help-modal-title');
+        var noteElement = overlay.querySelector('.help-modal-note');
+
+        var isOpen = false;
+
+        function applyNote(note) {
+            if (!noteElement)
+                return;
+            if (typeof note === 'string' && note.trim()) {
+                noteElement.textContent = note.trim();
+                noteElement.hidden = false;
+            } else {
+                noteElement.textContent = '';
+                noteElement.hidden = true;
+            }
+        }
+
+        function open(options) {
+            options = options || {};
+            var title = typeof options.title === 'string' && options.title.trim() ? options.title.trim() : 'Story Node Editor Help';
+            if (titleElement)
+                titleElement.textContent = title;
+            applyNote(options.note);
+
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('help-view-open');
+            isOpen = true;
+
+            document.addEventListener('keydown', handleKeydown, true);
+
+            if (closeButton) {
+                try {
+                    closeButton.focus({
+                        preventScroll: true
+                    });
+                } catch (err) {
+                    closeButton.focus();
+                }
+            }
+        }
+
+        function close() {
+            if (!isOpen)
+                return;
+
+            document.removeEventListener('keydown', handleKeydown, true);
+
+            overlay.classList.remove('is-visible');
+            overlay.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('help-view-open');
+            applyNote('');
+
+            isOpen = false;
+        }
+
+        function handleKeydown(evt) {
+            if (!isOpen)
+                return;
+            if (evt.key === 'Escape') {
+                evt.preventDefault();
+                close();
+            }
+        }
+
+        if (closeButton) {
+            closeButton.addEventListener('click', function(evt) {
+                evt.preventDefault();
+                close();
+            });
+        }
+
+        overlay.addEventListener('click', function(evt) {
+            if (evt.target === overlay) {
+                evt.preventDefault();
+                close();
+            }
+        });
+
+        return {
+            open: function(options) {
+                if (isOpen)
+                    close();
+                open(options || {});
+            },
+            close: close
+        };
+    }
+
 
     function createNewNode() {
         let rect = paper.el.getBoundingClientRect();
@@ -967,4 +1249,3 @@
 
 
 })(joint, V);
-
