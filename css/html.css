@@ -37,10 +37,6 @@ body.richtext-open .node-label {
     pointer-events: none;
 }
 
-.node:hover {
-    outline-color: #0D8DE9;
-}
-
 .node-label {
     display: block;
     font-size: 13px;
