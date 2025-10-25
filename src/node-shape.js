@@ -4,7 +4,7 @@
 
     Element.define('html.Element', {
             size: {
-                width: 300,
+                width: 340,
                 height: 228
             },
             fields: {
@@ -171,6 +171,7 @@
     joint.shapes.html.ElementView = ElementView.extend({
 
         html: null,
+        _alignChoicePortsFrame: null,
 
         presentationAttributes: ElementView.addPresentationAttributes({
             position: ['HTML_UPDATE'],
@@ -189,6 +190,7 @@
 
         initialize: function() {
             ElementView.prototype.initialize.apply(this, arguments);
+            this._alignChoicePortsFrame = null;
         },
 
         confirmUpdate: function(flags) {
@@ -277,6 +279,7 @@
             html.style.height = bbox.height + 'px';
             html.style.left = bbox.x + 'px';
             html.style.top = bbox.y + 'px';
+            this.scheduleChoicePortAlignment();
         },
 
         onFieldChange: function(evt) {
@@ -422,6 +425,7 @@
             }
 
             this.adjustNodeSize();
+            this.scheduleChoicePortAlignment();
         },
 
         adjustNodeSize: function() {
@@ -438,6 +442,71 @@
 
             // Update the model size
             this.model.resize(width, height);
+            this.scheduleChoicePortAlignment();
+        },
+
+        scheduleChoicePortAlignment: function() {
+            if (!this.html)
+                return;
+
+            if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+                if (this._alignChoicePortsFrame != null)
+                    window.cancelAnimationFrame(this._alignChoicePortsFrame);
+                this._alignChoicePortsFrame = window.requestAnimationFrame(function() {
+                    this._alignChoicePortsFrame = null;
+                    this.alignChoicePorts();
+                }.bind(this));
+            } else {
+                this.alignChoicePorts();
+            }
+        },
+
+        alignChoicePorts: function() {
+            if (!this.html)
+                return;
+
+            let choiceElements = Array.from(this.html.querySelectorAll('.choices-container .choice'));
+            if (!choiceElements.length)
+                return;
+
+            let ports = this.model.getPorts().filter(function(port) {
+                return port.group === 'choiceOut';
+            });
+
+            if (!ports.length)
+                return;
+
+            let size = this.model.get('size') || {};
+            let nodeWidth = typeof size.width === 'number' ? size.width : (this.html.offsetWidth || 0);
+            if (!(nodeWidth > 0))
+                nodeWidth = 340;
+
+            let htmlRect = this.html.getBoundingClientRect();
+
+            let mappedPorts = ports.map(function(port) {
+                let match = port.id && port.id.match(/^choice(\d+)_/);
+                return {
+                    port: port,
+                    index: match ? parseInt(match[1], 10) - 1 : null
+                };
+            }).filter(function(entry) {
+                return entry.index !== null && !isNaN(entry.index);
+            }).sort(function(a, b) {
+                return a.index - b.index;
+            });
+
+            mappedPorts.forEach(function(entry) {
+                let choiceElement = choiceElements[entry.index];
+                if (!choiceElement)
+                    return;
+
+                let target = choiceElement.querySelector('.choice-input') || choiceElement;
+                let rect = target.getBoundingClientRect();
+                let offsetY = (rect.top + rect.height / 2) - htmlRect.top;
+
+                this.model.portProp(entry.port.id, 'args/x', nodeWidth);
+                this.model.portProp(entry.port.id, 'args/y', offsetY);
+            }, this);
         },
 
         onAddChoice: function(evt) {
@@ -457,15 +526,22 @@
                 this.model.removePort(outPort[0].id);
             }
 
+            let size = this.model.get('size') || {};
+            let nodeWidth = typeof size.width === 'number' ? size.width : (this.html ? this.html.offsetWidth : 0);
+            if (!(nodeWidth > 0))
+                nodeWidth = 340;
+
             this.model.addPort({
                 //id: joint.util.uuid(), 
                 id: 'choice' + (choices.length) + '_' + this.model.id,
                 group: 'choiceOut',
                 args: {
-                    x: 300,
+                    x: nodeWidth,
                     y: 247 + ((choices.length - 1) * 40),
                 }
             });
+
+            this.scheduleChoicePortAlignment();
 
             console.log('ports:', this.model.getPorts());
         },
@@ -510,8 +586,11 @@
             let html = this.html;
             if (html && html.isConnected)
                 this.paper.htmlContainer.removeChild(html);
+            if (typeof window !== 'undefined' && this._alignChoicePortsFrame != null) {
+                window.cancelAnimationFrame(this._alignChoicePortsFrame);
+                this._alignChoicePortsFrame = null;
+            }
         }
 
     });
 })(joint, joint.util, V);
-
