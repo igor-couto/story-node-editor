@@ -203,7 +203,7 @@ body.richtext-open .node-label {
     background: transparent;
     border: none;
     padding: 0;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     width: 18px;
     height: 18px;
 }
@@ -238,7 +238,7 @@ body.richtext-open .node-label {
     color: #fff;
     font-size: 18px;
     border: none;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     padding: 0;
     padding: 5px 10px;
     border-radius: 4px;
@@ -281,7 +281,7 @@ body.richtext-open .node-label {
     background: none;
     border: none;
     padding: 8px;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     outline: none;
     display: flex;
     align-items: center;
@@ -321,7 +321,7 @@ body.richtext-open .node-label {
 }
 
 .richtext-modal {
-    width: min(960px, 92vw);
+    width: min(60%, 92vw);
     height: min(720px, 92vh);
     max-height: 92vh;
     min-height: 520px;
@@ -398,7 +398,7 @@ body.richtext-open .node-label {
     background: transparent;
     color: #222222;
     font-weight: 600;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
 }
 
 .richtext-button span {
@@ -458,7 +458,7 @@ body.richtext-open .node-label {
     color: #3A3A3A;
     font-size: 22px;
     line-height: 1;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -587,7 +587,7 @@ body.richtext-open .node-label {
     font-size: 26px;
     line-height: 1;
     color: #3A3A3A;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -679,7 +679,7 @@ body.code-view-open {
     font-size: 26px;
     line-height: 1;
     color: #3A3A3A;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -817,7 +817,7 @@ body.images-modal-open {
     font-size: 26px;
     line-height: 1;
     color: #3A3A3A;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -926,7 +926,7 @@ body.images-modal-open {
     color: #FFFFFF;
     font-size: 13px;
     font-weight: 600;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
@@ -948,7 +948,7 @@ body.images-modal-open {
     color: #D33A2C;
     font-size: 13px;
     font-weight: 600;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
@@ -979,7 +979,7 @@ body.images-modal-open {
 }
 
 .images-card.is-selectable {
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
