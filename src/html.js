@@ -168,8 +168,25 @@
         return convertMarkdownToHtml(markdownText || '');
     };
 
-    var imageLibrary = Array.isArray(window.storyNodeEditor.imageLibrary) ? window.storyNodeEditor.imageLibrary : [];
+    var defaultApiBaseUrl = 'https://localhost/api';
+    var resolvedApiBaseUrl = (typeof window.storyNodeEditor.apiBaseUrl === 'string' && window.storyNodeEditor.apiBaseUrl.trim()) ? window.storyNodeEditor.apiBaseUrl.trim() : defaultApiBaseUrl;
+    resolvedApiBaseUrl = resolvedApiBaseUrl.replace(/\/+$/, '');
+    window.storyNodeEditor.apiBaseUrl = resolvedApiBaseUrl;
+
+    var configuredImagesApiUrl = (typeof window.storyNodeEditor.imagesApiUrl === 'string' && window.storyNodeEditor.imagesApiUrl.trim()) ? window.storyNodeEditor.imagesApiUrl.trim() : resolvedApiBaseUrl + '/images';
+    configuredImagesApiUrl = configuredImagesApiUrl.replace(/\/+$/, '');
+    window.storyNodeEditor.imagesApiUrl = configuredImagesApiUrl;
+
+    var IMAGES_API_URL = configuredImagesApiUrl;
+
+    var existingImageLibrary = Array.isArray(window.storyNodeEditor.imageLibrary) ? window.storyNodeEditor.imageLibrary : [];
+    var imageLibrary = [];
     window.storyNodeEditor.imageLibrary = imageLibrary;
+    existingImageLibrary.forEach(function(item, index) {
+        var normalizedEntry = createImageEntry(item, index);
+        if (normalizedEntry)
+            imageLibrary.push(normalizedEntry);
+    });
     var imagesModal = null;
 
     function ensureImagesModal() {
@@ -179,41 +196,45 @@
     }
 
     window.storyNodeEditor.registerImage = function(imageInfo) {
-        if (!imageInfo || typeof imageInfo.dataUrl !== 'string')
-            return null;
+        var existingEntry = findImageLibraryEntry(imageInfo);
+        var normalizedEntry = createImageEntry(imageInfo, imageLibrary.length);
+        if (!normalizedEntry)
+            return existingEntry || null;
 
-        var maxBytes = 20 * 1024 * 1024; // 20 MB
-        if (typeof imageInfo.size === 'number' && imageInfo.size > maxBytes) {
-            console.warn('Skipping image registration because it exceeds the 20 MB limit.');
-            return null;
+        if (existingEntry) {
+            mergeImageMetadata(existingEntry, normalizedEntry);
+            return existingEntry;
         }
 
-        var dataUrl = imageInfo.dataUrl;
-        if (!dataUrl)
-            return null;
-
-        var existing = imageLibrary.find(function(entry) {
-            return entry.dataUrl === dataUrl;
-        });
-        if (existing)
-            return existing;
-
-        var entry = {
-            id: 'img_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
-            dataUrl: dataUrl,
-            name: (typeof imageInfo.name === 'string' && imageInfo.name.trim()) ? imageInfo.name.trim() : 'Image ' + (imageLibrary.length + 1),
-            size: typeof imageInfo.size === 'number' ? imageInfo.size : 0,
-            addedAt: typeof imageInfo.addedAt === 'number' ? imageInfo.addedAt : Date.now()
-        };
-
-        imageLibrary.push(entry);
+        imageLibrary.push(normalizedEntry);
 
         if (imagesModal && typeof imagesModal.refresh === 'function')
             imagesModal.refresh();
+
+        if (normalizedEntry.dataUrl && !normalizedEntry.fileName)
+            ensureImagePersisted(normalizedEntry).catch(function(err) {
+                console.warn('Unable to persist image', err);
+            });
+
         if (typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
             window.storyNodeEditor.notifyImageUsageChange();
 
-        return entry;
+        return normalizedEntry;
+    };
+
+    window.storyNodeEditor.ensureImagePersisted = ensureImagePersisted;
+    window.storyNodeEditor.resolveImageSource = resolveImageSource;
+    window.storyNodeEditor.buildImageFileUrl = buildImageFileUrl;
+    window.storyNodeEditor.findImageByFileName = function(fileName) {
+        if (!fileName)
+            return null;
+        var trimmed = typeof fileName === 'string' ? fileName.trim() : '';
+        if (!trimmed)
+            return null;
+        var target = trimmed.toLowerCase();
+        return imageLibrary.find(function(entry) {
+            return entry && typeof entry.fileName === 'string' && entry.fileName.toLowerCase() === target;
+        }) || null;
     };
 
     window.storyNodeEditor.openImageLibrary = function(options) {
@@ -223,6 +244,260 @@
         if (imagesModal && imagesModal.isOpen())
             imagesModal.refresh();
     };
+
+    function generateImageId() {
+        return 'img_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    }
+
+    function buildImageDisplayName(imageInfo, fallbackIndex) {
+        if (imageInfo) {
+            if (typeof imageInfo.displayName === 'string' && imageInfo.displayName.trim())
+                return imageInfo.displayName.trim();
+            if (typeof imageInfo.name === 'string' && imageInfo.name.trim())
+                return imageInfo.name.trim();
+            if (typeof imageInfo.fileName === 'string' && imageInfo.fileName.trim())
+                return imageInfo.fileName.trim();
+        }
+        var baseIndex = typeof fallbackIndex === 'number' ? fallbackIndex + 1 : imageLibrary.length + 1;
+        return 'Image ' + baseIndex;
+    }
+
+    function createImageEntry(imageInfo, fallbackIndex) {
+        if (!imageInfo)
+            return null;
+
+        var maxBytes = 20 * 1024 * 1024; // 20 MB
+        var sourceInfo = imageInfo;
+        if (typeof imageInfo === 'string')
+            sourceInfo = {
+                dataUrl: imageInfo
+            };
+        else if (typeof imageInfo !== 'object')
+            return null;
+
+        if (typeof sourceInfo.size === 'number' && sourceInfo.size > maxBytes) {
+            console.warn('Skipping image registration because it exceeds the 20 MB limit.');
+            return null;
+        }
+
+        var dataUrl = typeof sourceInfo.dataUrl === 'string' ? sourceInfo.dataUrl : '';
+        var fileName = typeof sourceInfo.fileName === 'string' ? sourceInfo.fileName.trim() : '';
+        var url = typeof sourceInfo.url === 'string' ? sourceInfo.url.trim() : '';
+        if (!dataUrl && !fileName && !url)
+            return null;
+
+        var entry = {
+            id: typeof sourceInfo.id === 'string' ? sourceInfo.id : generateImageId(),
+            dataUrl: dataUrl,
+            name: buildImageDisplayName(sourceInfo, fallbackIndex),
+            size: typeof sourceInfo.size === 'number' ? sourceInfo.size : 0,
+            addedAt: typeof sourceInfo.addedAt === 'number' ? sourceInfo.addedAt : Date.now(),
+            fileName: fileName,
+            url: url || (fileName ? buildImageFileUrl(fileName) : ''),
+            persistPromise: null
+        };
+
+        return entry;
+    }
+
+    function mergeImageMetadata(target, source) {
+        if (!target || !source)
+            return;
+        if (source.dataUrl && !target.dataUrl)
+            target.dataUrl = source.dataUrl;
+        if (source.fileName && !target.fileName)
+            target.fileName = source.fileName;
+        if (source.url) {
+            target.url = source.url;
+        } else if (!target.url && target.fileName) {
+            target.url = buildImageFileUrl(target.fileName);
+        }
+        if (typeof source.size === 'number' && source.size > 0)
+            target.size = source.size;
+        if (typeof source.addedAt === 'number' && source.addedAt > 0)
+            target.addedAt = source.addedAt;
+        if (typeof source.name === 'string' && source.name.trim())
+            target.name = source.name.trim();
+    }
+
+    function findImageLibraryEntry(imageInfo) {
+        if (!imageInfo)
+            return null;
+        var possibleFileName = '';
+        var possibleUrl = '';
+        var possibleDataUrl = '';
+        var possibleId = '';
+
+        if (typeof imageInfo === 'string') {
+            var trimmed = imageInfo.trim();
+            if (!trimmed)
+                return null;
+            if (trimmed.indexOf('data:') === 0)
+                possibleDataUrl = trimmed;
+            else if (/^(https?:|\/)/i.test(trimmed))
+                possibleUrl = trimmed;
+            else
+                possibleFileName = trimmed.toLowerCase();
+        } else {
+            possibleFileName = (typeof imageInfo.fileName === 'string' && imageInfo.fileName.trim()) ? imageInfo.fileName.trim().toLowerCase() : '';
+            if (!possibleFileName && typeof imageInfo.name === 'string' && imageInfo.name.trim())
+                possibleFileName = imageInfo.name.trim().toLowerCase();
+            possibleUrl = (typeof imageInfo.url === 'string' && imageInfo.url.trim()) ? imageInfo.url.trim() : '';
+            possibleDataUrl = (typeof imageInfo.dataUrl === 'string' && imageInfo.dataUrl) ? imageInfo.dataUrl : '';
+            possibleId = (typeof imageInfo.id === 'string' && imageInfo.id) ? imageInfo.id : '';
+        }
+
+        return imageLibrary.find(function(entry) {
+            if (!entry)
+                return false;
+            if (possibleId && entry.id === possibleId)
+                return true;
+            if (possibleFileName && entry.fileName && entry.fileName.toLowerCase() === possibleFileName)
+                return true;
+            if (possibleUrl && entry.url && entry.url === possibleUrl)
+                return true;
+            if (possibleDataUrl && entry.dataUrl && entry.dataUrl === possibleDataUrl)
+                return true;
+            return false;
+        }) || null;
+    }
+
+    function buildImageFileUrl(fileName) {
+        if (!fileName)
+            return '';
+        if (/^(?:[a-z]+:)?\/\//i.test(fileName) || fileName.charAt(0) === '/' || fileName.indexOf('data:') === 0)
+            return fileName;
+        return IMAGES_API_URL + '/' + fileName.split('/').map(encodeURIComponent).join('/');
+    }
+
+    function resolveImageSource(value) {
+        if (!value)
+            return '';
+        if (typeof value === 'string') {
+            if (/^(data:|https?:|\/)/i.test(value))
+                return value;
+            return buildImageFileUrl(value);
+        }
+        if (typeof value === 'object') {
+            if (typeof value.url === 'string' && value.url)
+                return value.url;
+            if (typeof value.dataUrl === 'string' && value.dataUrl)
+                return value.dataUrl;
+            if (typeof value.fileName === 'string' && value.fileName)
+                return buildImageFileUrl(value.fileName);
+        }
+        return '';
+    }
+
+    function ensureImagePersisted(entry) {
+        if (!entry)
+            return Promise.reject(new Error('Missing image entry.'));
+        if (entry.fileName)
+            return Promise.resolve(entry);
+        if (!entry.dataUrl)
+            return Promise.reject(new Error('Cannot persist image without data.'));
+        if (!window.fetch)
+            return Promise.reject(new Error('Fetch API is not available.'));
+        if (entry.persistPromise)
+            return entry.persistPromise;
+
+        var payload = {
+            name: entry.name,
+            dataUrl: entry.dataUrl
+        };
+
+        entry.persistPromise = fetch(IMAGES_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        }).then(function(response) {
+            if (!response || !response.ok)
+                throw new Error('Failed to persist image.');
+            var contentType = response.headers && response.headers.get ? response.headers.get('Content-Type') : '';
+            if (contentType && contentType.indexOf('application/json') !== -1)
+                return response.json();
+            return null;
+        }).then(function(result) {
+            if (result && typeof result === 'object') {
+                if (!entry.fileName && typeof result.fileName === 'string' && result.fileName)
+                    entry.fileName = result.fileName;
+                if (typeof result.name === 'string' && result.name)
+                    entry.name = result.name;
+                if (typeof result.size === 'number')
+                    entry.size = result.size;
+                if (typeof result.addedAt === 'number')
+                    entry.addedAt = result.addedAt;
+                if (typeof result.url === 'string' && result.url)
+                    entry.url = result.url;
+            }
+            if (!entry.url && entry.fileName)
+                entry.url = buildImageFileUrl(entry.fileName);
+            if (imagesModal && imagesModal.isOpen())
+                imagesModal.refresh();
+            if (typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
+                window.storyNodeEditor.notifyImageUsageChange();
+            return entry;
+        }).catch(function(err) {
+            console.error('Failed to persist image', err);
+            throw err;
+        }).finally(function() {
+            entry.persistPromise = null;
+        });
+
+        return entry.persistPromise;
+    }
+
+    function fetchPersistedImages() {
+        if (!window.fetch)
+            return;
+        fetch(IMAGES_API_URL, {
+            method: 'GET'
+        }).then(function(response) {
+            if (!response || !response.ok)
+                throw new Error('Failed to load images.');
+            var contentType = response.headers && response.headers.get ? response.headers.get('Content-Type') : '';
+            if (contentType && contentType.indexOf('application/json') !== -1)
+                return response.json();
+            return [];
+        }).then(function(items) {
+            if (!Array.isArray(items))
+                return;
+            items.forEach(function(item, index) {
+                window.storyNodeEditor.registerImage({
+                    id: typeof item.id === 'string' ? item.id : undefined,
+                    displayName: item.displayName,
+                    name: item.name,
+                    fileName: item.fileName || item.name,
+                    url: item.url,
+                    size: typeof item.size === 'number' ? item.size : 0,
+                    addedAt: typeof item.addedAt === 'number' ? item.addedAt : Date.now()
+                });
+            });
+        }).catch(function(err) {
+            console.warn('Unable to load persisted images', err);
+        });
+    }
+
+    function scheduleInitialImageSync() {
+        if (!window.fetch)
+            return;
+        imageLibrary.forEach(function(entry) {
+            if (entry && entry.dataUrl && !entry.fileName)
+                ensureImagePersisted(entry).catch(function(err) {
+                    console.warn('Unable to persist image', err);
+                });
+        });
+        fetchPersistedImages();
+    }
+
+    if (document.readyState === 'interactive' || document.readyState === 'complete')
+        scheduleInitialImageSync();
+    else
+        document.addEventListener('DOMContentLoaded', scheduleInitialImageSync, {
+            once: true
+        });
 
     var richTextEditor = createRichTextEditor();
     var codeViewer = createCodeViewer();
@@ -1253,6 +1528,7 @@
         var deleteButtonDefaultLabel = deleteButton ? deleteButton.textContent : 'Delete image';
         var selectedEntryId = null;
         var allowDeleteMode = false;
+        var isPersistingSelection = false;
 
         function formatFileSize(bytes) {
             if (!(bytes > 0))
@@ -1276,17 +1552,34 @@
             }
         }
 
-        function getImageUsageCount(dataUrl) {
-            if (!dataUrl || !graph)
+        function getImageUsageCount(entry) {
+            if (!graph)
+                return 0;
+            var targetFileName = entry && typeof entry.fileName === 'string' ? entry.fileName : '';
+            var targetDataUrl = entry && typeof entry.dataUrl === 'string' ? entry.dataUrl : '';
+            if (!targetFileName && !targetDataUrl)
                 return 0;
             try {
                 var cells = graph.getCells();
                 var count = 0;
                 cells.forEach(function(cell) {
                     if (cell && typeof cell.isElement === 'function' && cell.isElement()) {
-                        var nodeImage = cell.prop(['fields', 'image']);
-                        if (nodeImage && nodeImage === dataUrl)
-                            count++;
+                        var nodeValue = cell.prop(['fields', 'image']);
+                        if (!nodeValue)
+                            return;
+                        if (typeof nodeValue === 'object') {
+                            var nodeFileName = typeof nodeValue.fileName === 'string' ? nodeValue.fileName : '';
+                            var nodeDataUrl = typeof nodeValue.dataUrl === 'string' ? nodeValue.dataUrl : '';
+                            if (targetFileName && nodeFileName && nodeFileName === targetFileName)
+                                count++;
+                            else if (!targetFileName && targetDataUrl && nodeDataUrl === targetDataUrl)
+                                count++;
+                        } else if (typeof nodeValue === 'string') {
+                            if (targetFileName && nodeValue === targetFileName)
+                                count++;
+                            else if (!targetFileName && targetDataUrl && nodeValue === targetDataUrl)
+                                count++;
+                        }
                     }
                 });
                 return count;
@@ -1331,7 +1624,7 @@
                 deleteButton.textContent = deleteButtonDefaultLabel;
                 return;
             }
-            var usage = getImageUsageCount(entry.dataUrl);
+            var usage = getImageUsageCount(entry);
             if (usage > 0) {
                 deleteButton.disabled = true;
                 deleteButton.textContent = usage === 1 ? 'In use by 1 node' : 'In use by ' + usage + ' nodes';
@@ -1358,7 +1651,7 @@
             var entry = getEntryById(selectedEntryId);
             if (!entry)
                 return;
-            var usage = getImageUsageCount(entry.dataUrl);
+            var usage = getImageUsageCount(entry);
             if (usage > 0) {
                 updateDeleteButton();
                 return;
@@ -1408,6 +1701,8 @@
                 card.setAttribute('role', 'listitem');
                 card.tabIndex = 0;
                 card.setAttribute('data-entry-id', entry.id);
+                if (entry.fileName)
+                    card.setAttribute('data-file-name', entry.fileName);
                 if (enableSelection)
                     card.classList.add('is-selectable');
 
@@ -1415,7 +1710,8 @@
                 thumb.className = 'images-thumb';
 
                 var img = document.createElement('img');
-                img.src = entry.dataUrl;
+                var previewUrl = resolveImageSource(entry);
+                img.src = previewUrl || 'assets/default.png';
                 img.alt = entry.name || 'Uploaded image';
                 img.draggable = false;
                 thumb.appendChild(img);
@@ -1437,7 +1733,13 @@
                 var timestampText = formatTimestamp(entry.addedAt);
                 if (timestampText)
                     detailsParts.push(timestampText);
-                var usageCount = getImageUsageCount(entry.dataUrl);
+                if (entry.fileName)
+                    detailsParts.push(entry.fileName);
+                else if (entry.persistPromise)
+                    detailsParts.push('Saving...');
+                else
+                    detailsParts.push('Not saved yet');
+                var usageCount = getImageUsageCount(entry);
                 if (usageCount > 0)
                     detailsParts.push(usageCount === 1 ? 'Used by 1 node' : 'Used by ' + usageCount + ' nodes');
                 else
@@ -1488,11 +1790,40 @@
         }
 
         function selectEntry(entry) {
-            if (!isPickerMode)
+            if (!isPickerMode || !entry)
                 return;
-            if (entry && currentOptions && typeof currentOptions.onSelect === 'function')
-                currentOptions.onSelect(entry);
-            closeModal();
+            if (isPersistingSelection)
+                return;
+
+            var onSelect = (currentOptions && typeof currentOptions.onSelect === 'function') ? currentOptions.onSelect : null;
+            var persistencePromise = null;
+            if (typeof window.storyNodeEditor.ensureImagePersisted === 'function')
+                persistencePromise = window.storyNodeEditor.ensureImagePersisted(entry);
+
+            if (!persistencePromise || typeof persistencePromise.then !== 'function') {
+                if (onSelect)
+                    onSelect(entry);
+                closeModal();
+                return;
+            }
+
+            isPersistingSelection = true;
+            if (hintElement)
+                hintElement.textContent = 'Saving image...';
+
+            persistencePromise.then(function(persistedEntry) {
+                if (hintElement)
+                    hintElement.textContent = hintDefaultText;
+                if (onSelect)
+                    onSelect(persistedEntry || entry);
+                closeModal();
+                isPersistingSelection = false;
+            }).catch(function(err) {
+                console.error('Unable to persist selected image', err);
+                if (hintElement)
+                    hintElement.textContent = 'Failed to save image. Please try again.';
+                isPersistingSelection = false;
+            });
         }
 
         function handleKeydown(evt) {
@@ -1538,6 +1869,7 @@
             isPickerMode = false;
             allowDeleteMode = false;
             selectedEntryId = null;
+            isPersistingSelection = false;
             if (uploadInput)
                 uploadInput.value = '';
             if (deleteButton) {
@@ -1721,6 +2053,75 @@
         newNode.addTo(graph);
     }
 
+    function extractFileNameFromUrl(url) {
+        if (!url || typeof url !== 'string')
+            return '';
+        var sanitized = url;
+        var hashIndex = sanitized.indexOf('#');
+        if (hashIndex >= 0)
+            sanitized = sanitized.slice(0, hashIndex);
+        var queryIndex = sanitized.indexOf('?');
+        if (queryIndex >= 0)
+            sanitized = sanitized.slice(0, queryIndex);
+        var segments = sanitized.split('/');
+        var candidate = segments.pop() || segments.pop() || '';
+        if (!candidate)
+            return '';
+        try {
+            return decodeURIComponent(candidate);
+        } catch (err) {
+            return candidate;
+        }
+    }
+
+    function resolveImageFileName(imageValue) {
+        if (!imageValue)
+            return '';
+        if (typeof imageValue === 'object') {
+            if (typeof imageValue.fileName === 'string' && imageValue.fileName.trim())
+                return imageValue.fileName.trim();
+            if (typeof imageValue.url === 'string' && imageValue.url.trim()) {
+                var fromUrl = resolveImageFileName(imageValue.url.trim());
+                if (fromUrl)
+                    return fromUrl;
+            }
+            if (typeof imageValue.dataUrl === 'string' && imageValue.dataUrl) {
+                var matchedData = findImageLibraryEntry({
+                    dataUrl: imageValue.dataUrl
+                });
+                if (matchedData && matchedData.fileName)
+                    return matchedData.fileName;
+            }
+            return '';
+        }
+        if (typeof imageValue === 'string') {
+            var trimmed = imageValue.trim();
+            if (!trimmed)
+                return '';
+            if (trimmed.indexOf('data:') === 0) {
+                var matchedEntry = findImageLibraryEntry({
+                    dataUrl: trimmed
+                });
+                return matchedEntry && matchedEntry.fileName ? matchedEntry.fileName : '';
+            }
+            if (/^(https?:|\/)/i.test(trimmed)) {
+                var byUrl = findImageLibraryEntry({
+                    url: trimmed
+                });
+                if (byUrl && byUrl.fileName)
+                    return byUrl.fileName;
+                return extractFileNameFromUrl(trimmed);
+            }
+            var byFileName = findImageLibraryEntry({
+                fileName: trimmed
+            });
+            if (byFileName && byFileName.fileName)
+                return byFileName.fileName;
+            return trimmed;
+        }
+        return '';
+    }
+
     function collectDiagramData() {
         const cells = graph.getCells();
         const nodes = cells.filter(cell => cell.isElement());
@@ -1737,7 +2138,8 @@
             const nodePosition = node.position();
             const nodeTitle = node.prop(['fields', 'title']) || '';
             const nodeText = node.prop(['fields', 'content']) || '';
-            const nodeImage = node.prop(['fields', 'image']) || '';
+            const rawNodeImage = node.prop(['fields', 'image']);
+            const nodeImageFileName = resolveImageFileName(rawNodeImage);
             const nodeChoices = node.prop(['fields', 'choices']) || [];
 
             // Prepare the basic node data
@@ -1750,8 +2152,8 @@
                     y: nodePosition.y
                 }
             };
-            if (nodeImage)
-                nodeData.image = nodeImage;
+            if (nodeImageFileName)
+                nodeData.image = nodeImageFileName;
 
             // If the node has choices, initialize the choices array with placeholder objects
             if (nodeChoices.length > 0) {

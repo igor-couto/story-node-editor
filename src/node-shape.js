@@ -401,17 +401,23 @@
             evt.stopPropagation();
 
             if (window.storyNodeEditor && typeof window.storyNodeEditor.openImageLibrary === 'function') {
-                let self = this;
+                var self = this;
                 window.storyNodeEditor.openImageLibrary({
                     title: 'Select Image',
                     allowUpload: true,
                     onSelect: function(entry) {
                         if (!entry || typeof entry !== 'object')
                             return;
-                        let dataUrl = typeof entry.dataUrl === 'string' ? entry.dataUrl : '';
-                        if (!dataUrl)
+                        var imageValue = '';
+                        if (typeof entry.fileName === 'string' && entry.fileName)
+                            imageValue = entry.fileName;
+                        else if (typeof entry.url === 'string' && entry.url)
+                            imageValue = entry.url;
+                        else if (typeof entry.dataUrl === 'string' && entry.dataUrl)
+                            imageValue = entry.dataUrl;
+                        if (!imageValue)
                             return;
-                        self.model.prop(['fields', 'image'], dataUrl);
+                        self.model.prop(['fields', 'image'], imageValue);
                         if (window.storyNodeEditor && typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
                             window.storyNodeEditor.notifyImageUsageChange();
                     }
@@ -450,22 +456,41 @@
             }
 
             let reader = new FileReader();
+            let self = this;
             reader.onload = function(loadEvt) {
                 let dataUrl = typeof loadEvt.target.result === 'string' ? loadEvt.target.result : '';
-                if (dataUrl) {
-                    this.model.prop(['fields', 'image'], dataUrl);
-                    if (window.storyNodeEditor && typeof window.storyNodeEditor.registerImage === 'function') {
-                        window.storyNodeEditor.registerImage({
-                            dataUrl: dataUrl,
-                            name: file && typeof file.name === 'string' ? file.name : '',
-                            size: file && typeof file.size === 'number' ? file.size : 0,
-                            addedAt: Date.now()
-                        });
-                    }
-                    if (window.storyNodeEditor && typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
-                        window.storyNodeEditor.notifyImageUsageChange();
+                if (!dataUrl)
+                    return;
+
+                self.model.prop(['fields', 'image'], dataUrl);
+
+                let registeredEntry = null;
+                if (window.storyNodeEditor && typeof window.storyNodeEditor.registerImage === 'function') {
+                    registeredEntry = window.storyNodeEditor.registerImage({
+                        dataUrl: dataUrl,
+                        name: file && typeof file.name === 'string' ? file.name : '',
+                        size: file && typeof file.size === 'number' ? file.size : 0,
+                        addedAt: Date.now()
+                    });
                 }
-            }.bind(this);
+
+                let persistencePromise = null;
+                if (registeredEntry && window.storyNodeEditor && typeof window.storyNodeEditor.ensureImagePersisted === 'function')
+                    persistencePromise = window.storyNodeEditor.ensureImagePersisted(registeredEntry);
+
+                if (persistencePromise && typeof persistencePromise.then === 'function') {
+                    persistencePromise.then(function(persisted) {
+                        if (persisted && persisted.fileName)
+                            self.model.prop(['fields', 'image'], persisted.fileName);
+                        if (window.storyNodeEditor && typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
+                            window.storyNodeEditor.notifyImageUsageChange();
+                    }).catch(function(err) {
+                        console.error('Failed to persist image', err);
+                    });
+                } else if (window.storyNodeEditor && typeof window.storyNodeEditor.notifyImageUsageChange === 'function') {
+                    window.storyNodeEditor.notifyImageUsageChange();
+                }
+            };
             reader.onerror = function(err) {
                 console.error('Failed to read image file', err);
             };
@@ -520,19 +545,29 @@
                             }
                         } else if (field.classList.contains('node-image-display')) {
                             let imageElement = field.querySelector('.node-image-element');
-                            if (value) {
-                                if (imageElement && imageElement.src !== value)
-                                    imageElement.src = value;
-                                field.classList.remove('field-empty');
-                            } else {
-                                if (imageElement) {
+                            let resolvedSrc = '';
+                            if (value && window.storyNodeEditor && typeof window.storyNodeEditor.resolveImageSource === 'function')
+                                resolvedSrc = window.storyNodeEditor.resolveImageSource(value);
+                            else if (typeof value === 'string')
+                                resolvedSrc = value;
+
+                            let hasImage = !!resolvedSrc;
+                            if (imageElement) {
+                                if (hasImage)
+                                    imageElement.src = resolvedSrc;
+                                if (!hasImage) {
                                     imageElement.removeAttribute('src');
                                     imageElement.src = '';
                                 }
-                                field.classList.add('field-empty');
                             }
+
+                            if (hasImage)
+                                field.classList.remove('field-empty');
+                            else
+                                field.classList.add('field-empty');
+
                             if (this.imageRemoveButton)
-                                this.imageRemoveButton.style.display = value ? 'inline-flex' : 'none';
+                                this.imageRemoveButton.style.display = hasImage ? 'inline-flex' : 'none';
                         } else if (attribute) {
                             field.dataset[attribute] = value;
                         }
