@@ -179,6 +179,188 @@
 
     var IMAGES_API_URL = configuredImagesApiUrl;
 
+    var configuredStorySaveUrl = (typeof window.storyNodeEditor.storySaveUrl === 'string' && window.storyNodeEditor.storySaveUrl.trim()) ? window.storyNodeEditor.storySaveUrl.trim() : resolvedApiBaseUrl;
+    window.storyNodeEditor.storySaveUrl = configuredStorySaveUrl;
+
+    var autoSaveEnabledFlag = window.storyNodeEditor.autoSaveEnabled !== false;
+    window.storyNodeEditor.autoSaveEnabled = autoSaveEnabledFlag;
+    var autoSaveDebounceMs = (typeof window.storyNodeEditor.autoSaveDebounce === 'number' && window.storyNodeEditor.autoSaveDebounce >= 0) ? window.storyNodeEditor.autoSaveDebounce : 600;
+    window.storyNodeEditor.autoSaveDebounce = autoSaveDebounceMs;
+    var autoSaveTimerId = null;
+    var autoSaveQueued = false;
+    var autoSaveQueuedReason = '';
+    var autoSaveInFlightPromise = null;
+    var lastSavedSnapshot = null;
+    var lastAutoSaveError = null;
+    var lastAutoSaveTimestamp = 0;
+    window.storyNodeEditor.lastAutoSaveError = lastAutoSaveError;
+    window.storyNodeEditor.lastAutoSaveTimestamp = lastAutoSaveTimestamp;
+    window.storyNodeEditor.lastAutoSaveReason = autoSaveQueuedReason;
+
+    function isAutoSaveAvailable() {
+        return !!configuredStorySaveUrl && typeof window.fetch === 'function';
+    }
+
+    function isAutoSaveActive() {
+        return autoSaveEnabledFlag && isAutoSaveAvailable();
+    }
+
+    function resetAutoSaveTimer(delay) {
+        if (autoSaveTimerId)
+            clearTimeout(autoSaveTimerId);
+        autoSaveTimerId = setTimeout(function() {
+            autoSaveTimerId = null;
+            flushAutoSave().catch(function(err) {
+                console.warn('Auto-save failed', err);
+            });
+        }, typeof delay === 'number' && delay >= 0 ? delay : autoSaveDebounceMs);
+    }
+
+    function queueAutoSave(reason, options) {
+        if (!autoSaveEnabledFlag || !isAutoSaveAvailable())
+            return;
+        autoSaveQueued = true;
+        autoSaveQueuedReason = reason || 'change';
+        window.storyNodeEditor.lastAutoSaveReason = autoSaveQueuedReason;
+        var delay = options && typeof options.delay === 'number' ? options.delay : autoSaveDebounceMs;
+        resetAutoSaveTimer(delay);
+    }
+
+    function sendStoryPayload(payloadJson, options) {
+        if (!configuredStorySaveUrl || typeof window.fetch !== 'function')
+            return Promise.reject(new Error('Story save URL or fetch API is unavailable.'));
+        var headers = {
+            'Content-Type': 'application/json'
+        };
+        if (options && options.headers && typeof options.headers === 'object') {
+            Object.keys(options.headers).forEach(function(key) {
+                headers[key] = options.headers[key];
+            });
+        }
+        return fetch(configuredStorySaveUrl, {
+            method: 'PUT',
+            headers: headers,
+            body: payloadJson
+        });
+    }
+
+    function flushAutoSave(options) {
+        if (!isAutoSaveAvailable())
+            return Promise.resolve(null);
+
+        var force = !!(options && options.force);
+
+        if (!autoSaveEnabledFlag && !force)
+            return Promise.resolve(null);
+
+        if (autoSaveInFlightPromise)
+            return autoSaveInFlightPromise;
+
+        if (!autoSaveQueued && !force)
+            return Promise.resolve(null);
+
+        autoSaveQueued = false;
+        autoSaveQueuedReason = force ? 'force' : autoSaveQueuedReason || 'change';
+        window.storyNodeEditor.lastAutoSaveReason = autoSaveQueuedReason;
+
+        var payload = options && options.payload ? options.payload : collectDiagramData();
+        var payloadJson = typeof payload === 'string' ? payload : JSON.stringify(payload);
+        if (!force && lastSavedSnapshot && lastSavedSnapshot === payloadJson)
+            return Promise.resolve(null);
+
+        autoSaveInFlightPromise = sendStoryPayload(payloadJson, options).then(function(response) {
+            if (!response || !response.ok)
+                throw new Error(response ? ('Story save failed with status ' + response.status) : 'Story save failed.');
+            lastSavedSnapshot = payloadJson;
+            lastAutoSaveError = null;
+            lastAutoSaveTimestamp = Date.now();
+            window.storyNodeEditor.lastAutoSaveError = lastAutoSaveError;
+            window.storyNodeEditor.lastAutoSaveTimestamp = lastAutoSaveTimestamp;
+            return response;
+        }).catch(function(err) {
+            lastAutoSaveError = err;
+            window.storyNodeEditor.lastAutoSaveError = lastAutoSaveError;
+            console.error('Story auto-save error', err);
+            throw err;
+        }).finally(function() {
+            autoSaveInFlightPromise = null;
+            if (autoSaveQueued)
+                resetAutoSaveTimer(120);
+        });
+
+        return autoSaveInFlightPromise;
+    }
+
+    window.storyNodeEditor.setStorySaveUrl = function(url) {
+        if (typeof url === 'string' && url.trim())
+            configuredStorySaveUrl = url.trim();
+        else
+            configuredStorySaveUrl = '';
+        window.storyNodeEditor.storySaveUrl = configuredStorySaveUrl;
+    };
+    window.storyNodeEditor.queueStorySave = function(reason, options) {
+        var resolvedReason = reason;
+        var resolvedOptions = options;
+        if (typeof reason === 'object' && !options) {
+            resolvedOptions = reason;
+            resolvedReason = reason && reason.reason;
+        }
+        queueAutoSave(resolvedReason || 'manual', resolvedOptions);
+    };
+    window.storyNodeEditor.flushStorySave = function(options) {
+        options = options || {};
+        options.force = options.force === undefined ? true : !!options.force;
+        return flushAutoSave(options);
+    };
+    window.storyNodeEditor.isAutoSaveActive = function() {
+        return isAutoSaveActive();
+    };
+    window.storyNodeEditor.setAutoSaveDebounce = function(ms) {
+        if (typeof ms === 'number' && ms >= 0) {
+            autoSaveDebounceMs = ms;
+            window.storyNodeEditor.autoSaveDebounce = autoSaveDebounceMs;
+            if (autoSaveQueued && !autoSaveInFlightPromise)
+                resetAutoSaveTimer(autoSaveDebounceMs);
+        }
+    };
+    window.storyNodeEditor.setAutoSaveEnabled = function(enabled) {
+        autoSaveEnabledFlag = !!enabled;
+        window.storyNodeEditor.autoSaveEnabled = autoSaveEnabledFlag;
+        if (!autoSaveEnabledFlag) {
+            if (autoSaveTimerId) {
+                clearTimeout(autoSaveTimerId);
+                autoSaveTimerId = null;
+            }
+        } else if (autoSaveQueued && !autoSaveInFlightPromise)
+            resetAutoSaveTimer();
+    };
+
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden' && isAutoSaveActive())
+            flushAutoSave().catch(function(err) {
+                console.warn('Auto-save on visibilitychange failed', err);
+            });
+    }, {
+        passive: true
+    });
+
+    window.addEventListener('beforeunload', function() {
+        if (!isAutoSaveActive())
+            return;
+        try {
+            var payload = collectDiagramData();
+            var payloadJson = JSON.stringify(payload);
+            if (payloadJson && payloadJson !== lastSavedSnapshot && navigator && typeof navigator.sendBeacon === 'function') {
+                var beaconData = new Blob([payloadJson], {
+                    type: 'application/json'
+                });
+                navigator.sendBeacon(configuredStorySaveUrl, beaconData);
+            }
+        } catch (err) {
+            console.warn('Unable to perform final auto-save', err);
+        }
+    });
+
     var existingImageLibrary = Array.isArray(window.storyNodeEditor.imageLibrary) ? window.storyNodeEditor.imageLibrary : [];
     var imageLibrary = [];
     window.storyNodeEditor.imageLibrary = imageLibrary;
@@ -551,12 +733,36 @@
         htmlContainer.style.transform = V.matrixToTransformString(this.matrix());
     });
 
+    function handleGraphMutation(reason, opt) {
+        if (opt && (opt.autoSave === false || opt.skipAutoSave === true || opt.skipStorySave === true))
+            return;
+        queueAutoSave(reason);
+    }
+
+    graph.on('add', function(cell, collection, opt) {
+        handleGraphMutation('graph-add', opt);
+    });
+
+    graph.on('change', function(cell, opt) {
+        handleGraphMutation('graph-change', opt);
+    });
+
+    graph.on('batch:stop', function(collection, opt) {
+        handleGraphMutation('graph-batch-stop', opt);
+    });
+
+    graph.on('reset', function(collection, opt) {
+        handleGraphMutation('graph-reset', opt);
+    });
+
     // TODO: Logic to remove ports
     graph.on('remove', function(cell, collection, opt) {
-        if (!cell.isLink() || !opt.ui) return;
-        const target = this.getCell(cell.target().id);
-        if (target instanceof joint.shapes.html.Element)
-            target.updateInPorts();
+        if (cell && typeof cell.isLink === 'function' && cell.isLink() && opt && opt.ui) {
+            const target = this.getCell(cell.target().id);
+            if (target instanceof joint.shapes.html.Element)
+                target.updateInPorts();
+        }
+        handleGraphMutation('graph-remove', opt);
     });
 
     // *************** PAN ***************
@@ -726,28 +932,20 @@
             return;
         saveButton.addEventListener('click', function() {
             const payload = collectDiagramData();
-
-            const apiUrl = 'https://localhost/api';
-
-            console.log(JSON.stringify(payload));
-
-            // Send the PUT request
-            fetch(apiUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
+            window.storyNodeEditor.flushStorySave({
+                    force: true,
+                    payload: payload
                 })
-                .then(response => {
-                    if (response.ok) {
+                .then(function(response) {
+                    if (response && response.ok)
                         alert('Diagram saved successfully!');
-                    } else {
+                    else {
                         alert('Failed to save diagram.');
-                        console.error('Save failed:', response.statusText);
+                        if (response)
+                            console.error('Save failed:', response.statusText);
                     }
                 })
-                .catch(error => {
+                .catch(function(error) {
                     alert('An error occurred while saving the diagram.');
                     console.error('Save error:', error);
                 });
