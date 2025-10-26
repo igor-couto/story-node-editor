@@ -85,12 +85,12 @@ body.richtext-open .node-label {
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    background-color: #FFFFFF;
-    border: 1px solid #565553;
+    background-color: #545454;
+    border: 1px solid #3d3d3d;
     border-radius: 4px;
-    color: #222222;
+    color: #ffffff;
     font-size: 13px;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     line-height: 1;
     pointer-events: auto;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
@@ -117,7 +117,7 @@ body.richtext-open .node-label {
     border-radius: 4px;
     color: #333333;
     font-size: 12px;
-    cursor: pointer;
+    cursor: url('../assets/default.png'), default;
     line-height: 1;
     pointer-events: auto;
     transition: background-color 0.2s ease, border-color 0.2s ease;

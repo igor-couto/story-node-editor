@@ -106,10 +106,10 @@
 
                     <div class="node-image-section">
                         <div class="node-image-actions">
-                            <button class="node-image-button" type="button" title="Add image">
+                            <button class="node-image-button" type="button">
                                 <span class="node-image-button-label">Add image</span>
                             </button>
-                            <button class="node-image-remove-button" type="button" title="Remove image" aria-label="Remove image">x</button>
+                            <button class="node-image-remove-button" type="button" aria-label="Remove image">x</button>
                         </div>
                         <input class="node-image-input" type="file" accept="image/*" aria-hidden="true" style="display: none;" />
                         <div @group-selector="field" class="node-image-display field-empty" data-attribute="image">
