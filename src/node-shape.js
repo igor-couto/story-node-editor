@@ -5,11 +5,12 @@
     Element.define('html.Element', {
             size: {
                 width: 340,
-                height: 228
+                height: 280
             },
             fields: {
                 title: '',
                 content: '',
+                image: '',
                 choices: []
             },
             attrs: {
@@ -100,6 +101,19 @@
                     </button>
 
                     <div @group-selector="field" class="node-title-display" data-attribute="title"></div>
+
+                    <div class="node-image-section">
+                        <div class="node-image-actions">
+                            <button class="node-image-button" type="button" title="Add image">
+                                <span class="node-image-button-label">Add image</span>
+                            </button>
+                            <button class="node-image-remove-button" type="button" title="Remove image" aria-label="Remove image">x</button>
+                        </div>
+                        <input class="node-image-input" type="file" accept="image/*" aria-hidden="true" style="display: none;" />
+                        <div @group-selector="field" class="node-image-display field-empty" data-attribute="image">
+                            <img class="node-image-element" alt="Node image" />
+                        </div>
+                    </div>
 
                     <label class="node-label">
                         <div @group-selector="field" class="node-content-display" data-attribute="content" tabindex="0" style="pointer-events: auto;"></div>
@@ -244,6 +258,26 @@
                     passive: true
                 });
 
+            this.imageButton = html.querySelector('.node-image-button');
+            if (this.imageButton)
+                this.imageButton.addEventListener('click', this.onImageButtonClick.bind(this));
+            this.imageRemoveButton = html.querySelector('.node-image-remove-button');
+            if (this.imageRemoveButton) {
+                this.imageRemoveButton.addEventListener('click', this.onImageRemove.bind(this));
+                this.imageRemoveButton.style.display = 'none';
+            }
+            this.imageInput = html.querySelector('.node-image-input');
+            if (this.imageInput) {
+                this.imageInput.style.display = 'none';
+                this.imageInput.addEventListener('change', this.onImageInputChange.bind(this));
+            }
+            this.imageDisplay = html.querySelector('.node-image-display');
+            this.imageElement = html.querySelector('.node-image-element');
+            if (this.imageElement) {
+                this.imageElement.addEventListener('load', this.onImageLoad.bind(this));
+                this.imageElement.addEventListener('error', this.onImageError.bind(this));
+            }
+
             let titleDisplay = html.querySelector('.node-title-display');
             if (titleDisplay)
                 titleDisplay.addEventListener('click', function(evt) {
@@ -270,6 +304,11 @@
             this.paper.htmlContainer.removeChild(html);
             this.html = null;
             this.fields = null;
+            this.imageButton = null;
+            this.imageRemoveButton = null;
+            this.imageInput = null;
+            this.imageDisplay = null;
+            this.imageElement = null;
         },
 
         updateHTML: function() {
@@ -329,6 +368,63 @@
             }
         },
 
+        onImageButtonClick: function(evt) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            if (!this.imageInput)
+                return;
+            // Reset input so selecting the same file again triggers change
+            this.imageInput.value = '';
+            this.imageInput.click();
+        },
+
+        onImageInputChange: function(evt) {
+            if (evt)
+                evt.stopPropagation();
+            let input = evt.target;
+            if (!input || !input.files || !input.files.length)
+                return;
+
+            let file = input.files[0];
+            if (!file) return;
+
+            if (file.type && file.type.indexOf('image/') !== 0) {
+                console.warn('Selected file is not an image.');
+                input.value = '';
+                return;
+            }
+
+            let reader = new FileReader();
+            reader.onload = function(loadEvt) {
+                let dataUrl = typeof loadEvt.target.result === 'string' ? loadEvt.target.result : '';
+                if (dataUrl)
+                    this.model.prop(['fields', 'image'], dataUrl);
+            }.bind(this);
+            reader.onerror = function(err) {
+                console.error('Failed to read image file', err);
+            };
+            reader.readAsDataURL(file);
+        },
+
+        onImageRemove: function(evt) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            this.model.prop(['fields', 'image'], '');
+            if (this.imageInput)
+                this.imageInput.value = '';
+        },
+
+        onImageLoad: function() {
+            this.adjustNodeSize();
+        },
+
+        onImageError: function() {
+            if (this.imageElement)
+                this.imageElement.removeAttribute('src');
+            if (this.model && this.model.prop(['fields', 'image']))
+                this.model.prop(['fields', 'image'], '');
+        },
+
         updateFields: function() {
             this.fields.forEach(function(field) {
                 let attribute = field.dataset.attribute;
@@ -354,6 +450,21 @@
                                 field.textContent = '';
                                 field.classList.add('field-empty');
                             }
+                        } else if (field.classList.contains('node-image-display')) {
+                            let imageElement = field.querySelector('.node-image-element');
+                            if (value) {
+                                if (imageElement && imageElement.src !== value)
+                                    imageElement.src = value;
+                                field.classList.remove('field-empty');
+                            } else {
+                                if (imageElement) {
+                                    imageElement.removeAttribute('src');
+                                    imageElement.src = '';
+                                }
+                                field.classList.add('field-empty');
+                            }
+                            if (this.imageRemoveButton)
+                                this.imageRemoveButton.style.display = value ? 'inline-flex' : 'none';
                         } else if (attribute) {
                             field.dataset[attribute] = value;
                         }
@@ -430,15 +541,19 @@
 
         adjustNodeSize: function() {
             let html = this.html;
+            if (!html)
+                return;
 
-            // Force reflow
-            html.style.display = 'none';
-            html.offsetHeight; // Reading offsetHeight forces reflow
-            html.style.display = '';
+            // Force a reflow to ensure layout reflects latest content (e.g., newly loaded images)
+            let previousDisplay = html.style.display;
+            html.style.display = 'block';
+            // Reading scrollHeight forces layout calculation
+            void html.scrollHeight;
+            html.style.display = previousDisplay;
 
-            // Now get the accurate dimensions
-            let width = html.offsetWidth;
-            let height = html.offsetHeight;
+            // Use scroll metrics to account for content that might extend overflow (images, etc.)
+            let width = Math.max(html.offsetWidth, html.scrollWidth);
+            let height = Math.max(html.offsetHeight, html.scrollHeight);
 
             // Update the model size
             this.model.resize(width, height);

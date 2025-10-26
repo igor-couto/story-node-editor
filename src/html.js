@@ -1152,6 +1152,7 @@
             fields: {
                 title: '',
                 content: '',
+                image: '',
                 choices: []
             }
         });
@@ -1175,6 +1176,7 @@
             const nodePosition = node.position();
             const nodeTitle = node.prop(['fields', 'title']) || '';
             const nodeText = node.prop(['fields', 'content']) || '';
+            const nodeImage = node.prop(['fields', 'image']) || '';
             const nodeChoices = node.prop(['fields', 'choices']) || [];
 
             // Prepare the basic node data
@@ -1187,6 +1189,8 @@
                     y: nodePosition.y
                 }
             };
+            if (nodeImage)
+                nodeData.image = nodeImage;
 
             // If the node has choices, initialize the choices array with placeholder objects
             if (nodeChoices.length > 0) {

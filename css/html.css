@@ -37,6 +37,10 @@ body.richtext-open .node-label {
     pointer-events: none;
 }
 
+.node:hover {
+    outline: 2px solid #0D8DE9;
+}
+
 .node-label {
     display: block;
     font-size: 13px;
@@ -59,6 +63,95 @@ body.richtext-open .node-label {
 
 .node-title-display.field-empty {
     min-height: 1.3em;
+}
+
+.node-image-section {
+    width: 85%;
+    margin: 12px 6% 0 4%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+.node-image-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.node-image-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background-color: #FFFFFF;
+    border: 1px solid #565553;
+    border-radius: 4px;
+    color: #222222;
+    font-size: 13px;
+    cursor: pointer;
+    line-height: 1;
+    pointer-events: auto;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.node-image-button:hover,
+.node-image-button:focus {
+    background-color: #0D8DE9;
+    border-color: #0D8DE9;
+    color: #FFFFFF;
+}
+
+.node-image-button-label {
+    pointer-events: none;
+}
+
+.node-image-remove-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    background-color: #F7F7F7;
+    border: 1px solid #C0C0C0;
+    border-radius: 4px;
+    color: #333333;
+    font-size: 12px;
+    cursor: pointer;
+    line-height: 1;
+    pointer-events: auto;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.node-image-remove-button:hover,
+.node-image-remove-button:focus {
+    background-color: #F0DADA;
+    border-color: #D99E9E;
+}
+
+.node-image-display {
+    width: 100%;
+    background-color: #FFFFFF;
+    border: 1px solid #565553;
+    border-radius: 4px;
+    padding: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60px;
+    overflow: hidden;
+}
+
+.node-image-display.field-empty {
+    display: none;
+}
+
+.node-image-display img {
+    max-width: 100%;
+    max-height: 180px;
+    height: auto;
+    border-radius: 4px;
+    display: block;
 }
 
 .node-content-display {
