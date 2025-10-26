@@ -399,9 +399,27 @@
         onImageButtonClick: function(evt) {
             evt.preventDefault();
             evt.stopPropagation();
+
+            if (window.storyNodeEditor && typeof window.storyNodeEditor.openImageLibrary === 'function') {
+                let self = this;
+                window.storyNodeEditor.openImageLibrary({
+                    title: 'Select Image',
+                    allowUpload: true,
+                    onSelect: function(entry) {
+                        if (!entry || typeof entry !== 'object')
+                            return;
+                        let dataUrl = typeof entry.dataUrl === 'string' ? entry.dataUrl : '';
+                        if (!dataUrl)
+                            return;
+                        self.model.prop(['fields', 'image'], dataUrl);
+                    }
+                });
+                return;
+            }
+
             if (!this.imageInput)
                 return;
-            // Reset input so selecting the same file again triggers change
+            // Fallback: open file picker directly
             this.imageInput.value = '';
             this.imageInput.click();
         },

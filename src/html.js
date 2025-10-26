@@ -1212,6 +1212,11 @@
             '        <button type="button" class="images-modal-close" aria-label="Close image library">&times;</button>',
             '    </div>',
             '    <div class="images-modal-body">',
+            '        <div class="images-modal-actions">',
+            '            <button type="button" class="images-modal-upload">Upload image</button>',
+            '            <span class="images-modal-hint">PNG, JPG, or GIF</span>',
+            '            <input type="file" class="images-modal-file" accept="image/*" hidden />',
+            '        </div>',
             '        <p class="images-modal-empty">No images uploaded yet this session.</p>',
             '        <div class="images-grid" role="list"></div>',
             '    </div>',
@@ -1223,7 +1228,13 @@
         var closeButton = overlay.querySelector('.images-modal-close');
         var grid = overlay.querySelector('.images-grid');
         var emptyMessage = overlay.querySelector('.images-modal-empty');
+        var uploadButton = overlay.querySelector('.images-modal-upload');
+        var uploadInput = overlay.querySelector('.images-modal-file');
+        var titleElement = overlay.querySelector('.images-modal-title');
+        var hintElement = overlay.querySelector('.images-modal-hint');
         var isOpen = false;
+        var currentOptions = {};
+        var isPickerMode = false;
 
         function formatFileSize(bytes) {
             if (!(bytes > 0))
@@ -1255,6 +1266,7 @@
 
             var entries = Array.isArray(imageLibrary) ? imageLibrary.slice().reverse() : [];
             if (!entries.length) {
+                emptyMessage.textContent = isPickerMode ? 'No images yet. Upload a new one to get started.' : 'No images uploaded yet this session.';
                 emptyMessage.style.display = '';
                 grid.classList.remove('is-visible');
                 return;
@@ -1269,6 +1281,8 @@
                 card.className = 'images-card';
                 card.setAttribute('role', 'listitem');
                 card.tabIndex = 0;
+                if (isPickerMode)
+                    card.classList.add('is-selectable');
 
                 var thumb = document.createElement('div');
                 thumb.className = 'images-thumb';
@@ -1305,10 +1319,32 @@
                 }
 
                 card.appendChild(meta);
+
+                if (isPickerMode) {
+                    card.addEventListener('click', function(evt) {
+                        evt.preventDefault();
+                        selectEntry(entry);
+                    });
+                    card.addEventListener('keydown', function(evt) {
+                        if (evt.key === 'Enter' || evt.key === ' ') {
+                            evt.preventDefault();
+                            selectEntry(entry);
+                        }
+                    });
+                }
+
                 fragment.appendChild(card);
             });
 
             grid.appendChild(fragment);
+        }
+
+        function selectEntry(entry) {
+            if (!isPickerMode)
+                return;
+            if (entry && currentOptions && typeof currentOptions.onSelect === 'function')
+                currentOptions.onSelect(entry);
+            closeModal();
         }
 
         function handleKeydown(evt) {
@@ -1350,6 +1386,53 @@
             overlay.classList.remove('is-visible');
             overlay.setAttribute('aria-hidden', 'true');
             document.body.classList.remove('images-modal-open');
+            currentOptions = {};
+            isPickerMode = false;
+            if (uploadInput)
+                uploadInput.value = '';
+        }
+
+        function openModal(options) {
+            options = options || {};
+            currentOptions = options;
+            isPickerMode = typeof options.onSelect === 'function';
+
+            if (titleElement) {
+                var providedTitle = typeof options.title === 'string' && options.title.trim() ? options.title.trim() : null;
+                titleElement.textContent = providedTitle || (isPickerMode ? 'Select Image' : 'Uploaded Images');
+            }
+
+            if (hintElement)
+                hintElement.style.display = (options.allowUpload === false) ? 'none' : '';
+
+            if (uploadButton) {
+                var allowUpload = options.allowUpload !== false;
+                uploadButton.style.display = allowUpload ? 'inline-flex' : 'none';
+                uploadButton.disabled = !allowUpload;
+            }
+
+            if (uploadInput)
+                uploadInput.disabled = options.allowUpload === false;
+
+            if (isOpen) {
+                renderImages();
+                return;
+            }
+            isOpen = true;
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('images-modal-open');
+            renderImages();
+            document.addEventListener('keydown', handleKeydown, true);
+            if (closeButton) {
+                try {
+                    closeButton.focus({
+                        preventScroll: true
+                    });
+                } catch (err) {
+                    closeButton.focus();
+                }
+            }
         }
 
         if (closeButton) {
@@ -1372,9 +1455,52 @@
             });
         }
 
+        if (uploadButton && uploadInput) {
+            uploadButton.addEventListener('click', function(evt) {
+                evt.preventDefault();
+                if (uploadButton.disabled || uploadInput.disabled)
+                    return;
+                uploadInput.value = '';
+                uploadInput.click();
+            });
+
+            uploadInput.addEventListener('change', function(evt) {
+                var file = evt.target && evt.target.files ? evt.target.files[0] : null;
+                if (!file)
+                    return;
+                if (file.type && file.type.indexOf('image/') !== 0) {
+                    console.warn('Selected file is not an image.');
+                    uploadInput.value = '';
+                    return;
+                }
+                var reader = new FileReader();
+                reader.onload = function(loadEvt) {
+                    var dataUrl = typeof loadEvt.target.result === 'string' ? loadEvt.target.result : '';
+                    if (!dataUrl)
+                        return;
+                    var entry = window.storyNodeEditor.registerImage({
+                        dataUrl: dataUrl,
+                        name: file && file.name ? file.name : '',
+                        size: file && typeof file.size === 'number' ? file.size : 0,
+                        addedAt: Date.now()
+                    });
+                    renderImages();
+                    if (isPickerMode && entry && currentOptions && typeof currentOptions.onSelect === 'function') {
+                        currentOptions.onSelect(entry);
+                        closeModal();
+                    }
+                };
+                reader.onerror = function(err) {
+                    console.error('Failed to read image file', err);
+                };
+                reader.readAsDataURL(file);
+                uploadInput.value = '';
+            });
+        }
+
         return {
-            open: function() {
-                openModal();
+            open: function(options) {
+                openModal(options || {});
             },
             close: closeModal,
             refresh: function() {
