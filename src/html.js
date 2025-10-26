@@ -1226,6 +1226,7 @@
             '    <div class="images-modal-body">',
             '        <div class="images-modal-actions">',
             '            <button type="button" class="images-modal-upload">Upload image</button>',
+            '            <button type="button" class="images-modal-delete" disabled>Delete image</button>',
             '            <span class="images-modal-hint">PNG, JPG, or GIF • Max 20 MB</span>',
             '            <input type="file" class="images-modal-file" accept="image/*" hidden />',
             '        </div>',
@@ -1242,12 +1243,16 @@
         var emptyMessage = overlay.querySelector('.images-modal-empty');
         var uploadButton = overlay.querySelector('.images-modal-upload');
         var uploadInput = overlay.querySelector('.images-modal-file');
+        var deleteButton = overlay.querySelector('.images-modal-delete');
         var titleElement = overlay.querySelector('.images-modal-title');
         var hintElement = overlay.querySelector('.images-modal-hint');
         var hintDefaultText = hintElement ? hintElement.textContent : '';
         var isOpen = false;
         var currentOptions = {};
         var isPickerMode = false;
+        var deleteButtonDefaultLabel = deleteButton ? deleteButton.textContent : 'Delete image';
+        var selectedEntryId = null;
+        var allowDeleteMode = false;
 
         function formatFileSize(bytes) {
             if (!(bytes > 0))
@@ -1291,6 +1296,87 @@
             }
         }
 
+        function getEntryById(entryId) {
+            if (!entryId)
+                return null;
+            return imageLibrary.find(function(entry) {
+                return entry && entry.id === entryId;
+            }) || null;
+        }
+
+        function updateSelectionStyles() {
+            if (!grid)
+                return;
+            var cards = grid.querySelectorAll('.images-card');
+            Array.prototype.forEach.call(cards, function(card) {
+                var cardId = card.getAttribute('data-entry-id');
+                if (!cardId || !selectedEntryId)
+                    card.classList.remove('is-selected');
+                else
+                    card.classList.toggle('is-selected', cardId === selectedEntryId);
+            });
+        }
+
+        function updateDeleteButton() {
+            if (!deleteButton)
+                return;
+            if (!allowDeleteMode) {
+                deleteButton.disabled = true;
+                deleteButton.textContent = deleteButtonDefaultLabel;
+                return;
+            }
+            var entry = getEntryById(selectedEntryId);
+            if (!entry) {
+                deleteButton.disabled = true;
+                deleteButton.textContent = deleteButtonDefaultLabel;
+                return;
+            }
+            var usage = getImageUsageCount(entry.dataUrl);
+            if (usage > 0) {
+                deleteButton.disabled = true;
+                deleteButton.textContent = usage === 1 ? 'In use by 1 node' : 'In use by ' + usage + ' nodes';
+            } else {
+                deleteButton.disabled = false;
+                deleteButton.textContent = deleteButtonDefaultLabel;
+            }
+        }
+
+        function setSelectedEntry(entryId) {
+            if (!allowDeleteMode)
+                return;
+            if (selectedEntryId === entryId)
+                selectedEntryId = null;
+            else
+                selectedEntryId = entryId;
+            updateSelectionStyles();
+            updateDeleteButton();
+        }
+
+        function deleteSelectedEntry() {
+            if (!allowDeleteMode)
+                return;
+            var entry = getEntryById(selectedEntryId);
+            if (!entry)
+                return;
+            var usage = getImageUsageCount(entry.dataUrl);
+            if (usage > 0) {
+                updateDeleteButton();
+                return;
+            }
+            var message = 'Delete "' + (entry.name || 'Image') + '"? This cannot be undone.';
+            if (typeof window.confirm === 'function' && !window.confirm(message))
+                return;
+            var index = imageLibrary.findIndex(function(item) {
+                return item && item.id === entry.id;
+            });
+            if (index >= 0)
+                imageLibrary.splice(index, 1);
+            selectedEntryId = null;
+            if (hintElement)
+                hintElement.textContent = hintDefaultText;
+            renderImages();
+        }
+
         function renderImages() {
             if (!grid || !emptyMessage)
                 return;
@@ -1298,10 +1384,16 @@
             grid.innerHTML = '';
 
             var entries = Array.isArray(imageLibrary) ? imageLibrary.slice().reverse() : [];
+            if (selectedEntryId && !entries.some(function(entry) {
+                    return entry && entry.id === selectedEntryId;
+                }))
+                selectedEntryId = null;
             if (!entries.length) {
+                selectedEntryId = null;
                 emptyMessage.textContent = isPickerMode ? 'No images yet. Upload a new one to get started.' : 'No images uploaded yet this session.';
                 emptyMessage.style.display = '';
                 grid.classList.remove('is-visible');
+                updateDeleteButton();
                 return;
             }
 
@@ -1309,12 +1401,14 @@
             grid.classList.add('is-visible');
 
             var fragment = document.createDocumentFragment();
+            var enableSelection = isPickerMode || allowDeleteMode;
             entries.forEach(function(entry) {
                 var card = document.createElement('div');
                 card.className = 'images-card';
                 card.setAttribute('role', 'listitem');
                 card.tabIndex = 0;
-                if (isPickerMode)
+                card.setAttribute('data-entry-id', entry.id);
+                if (enableSelection)
                     card.classList.add('is-selectable');
 
                 var thumb = document.createElement('div');
@@ -1369,12 +1463,28 @@
                             selectEntry(entry);
                         }
                     });
+                } else if (allowDeleteMode) {
+                    card.addEventListener('click', function(evt) {
+                        evt.preventDefault();
+                        setSelectedEntry(entry.id);
+                    });
+                    card.addEventListener('keydown', function(evt) {
+                        if (evt.key === 'Enter' || evt.key === ' ') {
+                            evt.preventDefault();
+                            setSelectedEntry(entry.id);
+                        }
+                    });
                 }
+
+                if (selectedEntryId && entry.id === selectedEntryId)
+                    card.classList.add('is-selected');
 
                 fragment.appendChild(card);
             });
 
             grid.appendChild(fragment);
+            updateSelectionStyles();
+            updateDeleteButton();
         }
 
         function selectEntry(entry) {
@@ -1426,14 +1536,22 @@
             document.body.classList.remove('images-modal-open');
             currentOptions = {};
             isPickerMode = false;
+            allowDeleteMode = false;
+            selectedEntryId = null;
             if (uploadInput)
                 uploadInput.value = '';
+            if (deleteButton) {
+                deleteButton.disabled = true;
+                deleteButton.textContent = deleteButtonDefaultLabel;
+            }
         }
 
         function openModal(options) {
             options = options || {};
             currentOptions = options;
             isPickerMode = typeof options.onSelect === 'function';
+            allowDeleteMode = !isPickerMode && options.allowDelete !== false && !!deleteButton;
+            selectedEntryId = null;
 
             if (hintElement)
                 hintElement.textContent = hintDefaultText;
@@ -1454,6 +1572,12 @@
 
             if (uploadInput)
                 uploadInput.disabled = options.allowUpload === false;
+
+            if (deleteButton) {
+                deleteButton.style.display = allowDeleteMode ? 'inline-flex' : 'none';
+                deleteButton.disabled = true;
+                deleteButton.textContent = deleteButtonDefaultLabel;
+            }
 
             if (isOpen) {
                 renderImages();
@@ -1546,6 +1670,13 @@
                 };
                 reader.readAsDataURL(file);
                 uploadInput.value = '';
+            });
+        }
+
+        if (deleteButton) {
+            deleteButton.addEventListener('click', function(evt) {
+                evt.preventDefault();
+                deleteSelectedEntry();
             });
         }
 

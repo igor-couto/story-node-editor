@@ -932,6 +932,35 @@ body.images-modal-open {
     color: #FFFFFF;
 }
 
+.images-modal-delete {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background-color: #FFFFFF;
+    border: 1px solid #D33A2C;
+    border-radius: 6px;
+    color: #D33A2C;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.images-modal-delete:hover,
+.images-modal-delete:focus {
+    background-color: rgba(211, 58, 44, 0.12);
+    border-color: #B92A1A;
+    color: #B92A1A;
+}
+
+.images-modal-delete[disabled] {
+    background-color: #F5F5F5;
+    border-color: #CCCCCC;
+    color: #999999;
+    cursor: not-allowed;
+}
+
 .images-modal-upload[disabled] {
     background-color: #CCCCCC;
     border-color: #CCCCCC;
@@ -954,4 +983,9 @@ body.images-modal-open {
     border-color: #0D8DE9;
     box-shadow: 0 6px 18px rgba(13, 141, 233, 0.18);
     transform: translateY(-2px);
+}
+
+.images-card.is-selected {
+    border-color: #0D8DE9;
+    box-shadow: 0 6px 18px rgba(13, 141, 233, 0.18);
 }
