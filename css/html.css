@@ -131,9 +131,8 @@ body.richtext-open .node-label {
 
 .node-image-display {
     width: 100%;
-    background-color: #FFFFFF;
+    background-color: #3d3d3d;
     border: 1px solid #565553;
-    border-radius: 4px;
     padding: 6px;
     display: flex;
     align-items: center;
