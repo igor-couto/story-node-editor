@@ -535,6 +535,7 @@
                                 field.innerHTML = '<span class="node-content-placeholder">...</span>';
                                 field.classList.add('field-empty');
                             }
+                            this.updateContentClampState(field);
                         } else if (field.classList.contains('node-title-display')) {
                             if (value) {
                                 field.textContent = value;
@@ -594,6 +595,32 @@
             }.bind(this));
 
             this.updateChoices();
+        },
+
+        updateContentClampState: function(field) {
+            if (!field)
+                return;
+
+            field.classList.remove('is-clamped');
+
+            var evaluateClamp = function() {
+                if (!field || !field.isConnected) {
+                    if (field)
+                        field.classList.remove('is-clamped');
+                    return;
+                }
+                var verticalOverflow = field.scrollHeight - field.clientHeight > 1;
+                var horizontalOverflow = field.scrollWidth - field.clientWidth > 1;
+                if (verticalOverflow || horizontalOverflow)
+                    field.classList.add('is-clamped');
+                else
+                    field.classList.remove('is-clamped');
+            };
+
+            if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+                window.requestAnimationFrame(evaluateClamp);
+            else
+                setTimeout(evaluateClamp, 0);
         },
 
         updateChoices: function() {
