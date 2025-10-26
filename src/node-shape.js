@@ -207,6 +207,14 @@
         initialize: function() {
             ElementView.prototype.initialize.apply(this, arguments);
             this._alignChoicePortsFrame = null;
+            let size = this.model.get('size') || {};
+            let defaultWidth = typeof size.width === 'number' && size.width > 0 ? size.width : 340;
+            let defaultHeight = typeof size.height === 'number' && size.height > 0 ? size.height : 280;
+            this.defaultSize = {
+                width: defaultWidth,
+                height: defaultHeight
+            };
+            this.baseChoicesHeight = 0;
         },
 
         getPaperScale: function() {
@@ -313,6 +321,8 @@
             this.fields = fields;
             html.setAttribute('model-id', this.model.id);
 
+            this.baseChoicesHeight = this.choicesContainer ? this.choicesContainer.scrollHeight : 0;
+
             this.html = html;
         },
 
@@ -415,8 +425,17 @@
             let reader = new FileReader();
             reader.onload = function(loadEvt) {
                 let dataUrl = typeof loadEvt.target.result === 'string' ? loadEvt.target.result : '';
-                if (dataUrl)
+                if (dataUrl) {
                     this.model.prop(['fields', 'image'], dataUrl);
+                    if (window.storyNodeEditor && typeof window.storyNodeEditor.registerImage === 'function') {
+                        window.storyNodeEditor.registerImage({
+                            dataUrl: dataUrl,
+                            name: file && typeof file.name === 'string' ? file.name : '',
+                            size: file && typeof file.size === 'number' ? file.size : 0,
+                            addedAt: Date.now()
+                        });
+                    }
+                }
             }.bind(this);
             reader.onerror = function(err) {
                 console.error('Failed to read image file', err);
@@ -558,31 +577,25 @@
         },
 
         adjustNodeSize: function() {
-            let html = this.html;
-            if (!html)
+            if (!this.html)
                 return;
 
-            // Trigger layout calculation so measurements are up-to-date
+            let defaultWidth = (this.defaultSize && typeof this.defaultSize.width === 'number') ? this.defaultSize.width : 340;
+            let defaultHeight = (this.defaultSize && typeof this.defaultSize.height === 'number') ? this.defaultSize.height : 280;
+
+            let html = this.html;
+            html.style.width = defaultWidth + 'px';
+            html.style.height = 'auto';
+
+            // Force layout update to ensure accurate scroll measurements
             html.getBoundingClientRect();
 
-            let width = Math.max(html.offsetWidth, html.scrollWidth);
-            let height = Math.max(html.offsetHeight, html.scrollHeight);
+            let measuredHeightPx = Math.max(html.scrollHeight, html.offsetHeight, defaultHeight);
 
-            let scale = this.getPaperScale();
-            if (scale.sx)
-                width = width / scale.sx;
-            if (scale.sy)
-                height = height / scale.sy;
+            html.style.height = measuredHeightPx + 'px';
 
-            // Fallback to existing size if measurements fail
-            let currentSize = this.model.get('size') || {};
-            if (!(width > 0) && typeof currentSize.width === 'number')
-                width = currentSize.width;
-            if (!(height > 0) && typeof currentSize.height === 'number')
-                height = currentSize.height;
+            this.model.resize(defaultWidth, measuredHeightPx);
 
-            // Update the model size
-            this.model.resize(width, height);
             this.scheduleChoicePortAlignment();
         },
 

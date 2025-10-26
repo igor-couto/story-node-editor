@@ -168,9 +168,54 @@
         return convertMarkdownToHtml(markdownText || '');
     };
 
+    var imageLibrary = Array.isArray(window.storyNodeEditor.imageLibrary) ? window.storyNodeEditor.imageLibrary : [];
+    window.storyNodeEditor.imageLibrary = imageLibrary;
+    var imagesModal = null;
+
+    function ensureImagesModal() {
+        if (!imagesModal)
+            imagesModal = createImagesModal();
+        return imagesModal;
+    }
+
+    window.storyNodeEditor.registerImage = function(imageInfo) {
+        if (!imageInfo || typeof imageInfo.dataUrl !== 'string')
+            return null;
+
+        var dataUrl = imageInfo.dataUrl;
+        if (!dataUrl)
+            return null;
+
+        var existing = imageLibrary.find(function(entry) {
+            return entry.dataUrl === dataUrl;
+        });
+        if (existing)
+            return existing;
+
+        var entry = {
+            id: 'img_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+            dataUrl: dataUrl,
+            name: (typeof imageInfo.name === 'string' && imageInfo.name.trim()) ? imageInfo.name.trim() : 'Image ' + (imageLibrary.length + 1),
+            size: typeof imageInfo.size === 'number' ? imageInfo.size : 0,
+            addedAt: typeof imageInfo.addedAt === 'number' ? imageInfo.addedAt : Date.now()
+        };
+
+        imageLibrary.push(entry);
+
+        if (imagesModal && typeof imagesModal.refresh === 'function')
+            imagesModal.refresh();
+
+        return entry;
+    };
+
+    window.storyNodeEditor.openImageLibrary = function(options) {
+        ensureImagesModal().open(options || {});
+    };
+
     var richTextEditor = createRichTextEditor();
     var codeViewer = createCodeViewer();
     var helpModal = createHelpModal();
+
     window.storyNodeEditor.openTextEditor = function(options) {
         richTextEditor.open(options || {});
     };
@@ -371,6 +416,16 @@
     }, {
         passive: true
     });
+
+    var imagesButton = document.getElementById('images');
+    if (imagesButton) {
+        imagesButton.addEventListener('click', function() {
+            if (window.storyNodeEditor && typeof window.storyNodeEditor.openImageLibrary === 'function')
+                window.storyNodeEditor.openImageLibrary();
+        }, {
+            passive: true
+        });
+    }
 
     document.getElementById('new-node').addEventListener('click', function() {
         createNewNode();
@@ -1143,6 +1198,192 @@
                 open(options || {});
             },
             close: close
+        };
+    }
+
+    function createImagesModal() {
+        var overlay = document.createElement('div');
+        overlay.className = 'images-overlay';
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.innerHTML = [
+            '<div class="images-modal" role="dialog" aria-modal="true" aria-label="Uploaded images this session">',
+            '    <div class="images-modal-header">',
+            '        <h2 class="images-modal-title">Uploaded Images</h2>',
+            '        <button type="button" class="images-modal-close" aria-label="Close image library">&times;</button>',
+            '    </div>',
+            '    <div class="images-modal-body">',
+            '        <p class="images-modal-empty">No images uploaded yet this session.</p>',
+            '        <div class="images-grid" role="list"></div>',
+            '    </div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(overlay);
+
+        var modal = overlay.querySelector('.images-modal');
+        var closeButton = overlay.querySelector('.images-modal-close');
+        var grid = overlay.querySelector('.images-grid');
+        var emptyMessage = overlay.querySelector('.images-modal-empty');
+        var isOpen = false;
+
+        function formatFileSize(bytes) {
+            if (!(bytes > 0))
+                return '';
+            var units = ['B', 'KB', 'MB', 'GB'];
+            var power = Math.floor(Math.log(bytes) / Math.log(1024));
+            power = Math.min(power, units.length - 1);
+            var value = bytes / Math.pow(1024, power);
+            var precision = value >= 10 || power === 0 ? 0 : 1;
+            return value.toFixed(precision) + ' ' + units[power];
+        }
+
+        function formatTimestamp(timestamp) {
+            if (!timestamp)
+                return '';
+            try {
+                var date = new Date(timestamp);
+                return date.toLocaleString();
+            } catch (err) {
+                return '';
+            }
+        }
+
+        function renderImages() {
+            if (!grid || !emptyMessage)
+                return;
+
+            grid.innerHTML = '';
+
+            var entries = Array.isArray(imageLibrary) ? imageLibrary.slice().reverse() : [];
+            if (!entries.length) {
+                emptyMessage.style.display = '';
+                grid.classList.remove('is-visible');
+                return;
+            }
+
+            emptyMessage.style.display = 'none';
+            grid.classList.add('is-visible');
+
+            var fragment = document.createDocumentFragment();
+            entries.forEach(function(entry) {
+                var card = document.createElement('div');
+                card.className = 'images-card';
+                card.setAttribute('role', 'listitem');
+                card.tabIndex = 0;
+
+                var thumb = document.createElement('div');
+                thumb.className = 'images-thumb';
+
+                var img = document.createElement('img');
+                img.src = entry.dataUrl;
+                img.alt = entry.name || 'Uploaded image';
+                img.draggable = false;
+                thumb.appendChild(img);
+                card.appendChild(thumb);
+
+                var meta = document.createElement('div');
+                meta.className = 'images-meta';
+
+                var metaName = document.createElement('div');
+                metaName.className = 'images-meta-name';
+                metaName.textContent = entry.name || 'Image';
+                metaName.title = metaName.textContent;
+                meta.appendChild(metaName);
+
+                var detailsParts = [];
+                var sizeText = formatFileSize(entry.size);
+                if (sizeText)
+                    detailsParts.push(sizeText);
+                var timestampText = formatTimestamp(entry.addedAt);
+                if (timestampText)
+                    detailsParts.push(timestampText);
+
+                if (detailsParts.length) {
+                    var metaDetails = document.createElement('div');
+                    metaDetails.className = 'images-meta-details';
+                    metaDetails.textContent = detailsParts.join(' • ');
+                    meta.appendChild(metaDetails);
+                }
+
+                card.appendChild(meta);
+                fragment.appendChild(card);
+            });
+
+            grid.appendChild(fragment);
+        }
+
+        function handleKeydown(evt) {
+            if (!isOpen)
+                return;
+            if (evt.key === 'Escape') {
+                evt.preventDefault();
+                closeModal();
+            }
+        }
+
+        function openModal() {
+            if (isOpen) {
+                renderImages();
+                return;
+            }
+            isOpen = true;
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('images-modal-open');
+            renderImages();
+            document.addEventListener('keydown', handleKeydown, true);
+            if (closeButton) {
+                try {
+                    closeButton.focus({
+                        preventScroll: true
+                    });
+                } catch (err) {
+                    closeButton.focus();
+                }
+            }
+        }
+
+        function closeModal() {
+            if (!isOpen)
+                return;
+            isOpen = false;
+            document.removeEventListener('keydown', handleKeydown, true);
+            overlay.classList.remove('is-visible');
+            overlay.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('images-modal-open');
+        }
+
+        if (closeButton) {
+            closeButton.addEventListener('click', function(evt) {
+                evt.preventDefault();
+                closeModal();
+            });
+        }
+
+        overlay.addEventListener('click', function(evt) {
+            if (evt.target === overlay) {
+                evt.preventDefault();
+                closeModal();
+            }
+        });
+
+        if (modal) {
+            modal.addEventListener('click', function(evt) {
+                evt.stopPropagation();
+            });
+        }
+
+        return {
+            open: function() {
+                openModal();
+            },
+            close: closeModal,
+            refresh: function() {
+                if (isOpen)
+                    renderImages();
+            },
+            isOpen: function() {
+                return isOpen;
+            }
         };
     }
 
