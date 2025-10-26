@@ -590,11 +590,24 @@
             // Force layout update to ensure accurate scroll measurements
             html.getBoundingClientRect();
 
-            let measuredHeightPx = Math.max(html.scrollHeight, html.offsetHeight, defaultHeight);
+            // Measure the rendered height (in DOM pixels, matching model units at scale 1)
+            let measuredHeightPx = Math.max(defaultHeight, Math.round(Math.max(html.scrollHeight, html.offsetHeight)));
 
-            html.style.height = measuredHeightPx + 'px';
+            let currentSize = this.model.get('size') || {};
+            let currentHeight = typeof currentSize.height === 'number' ? currentSize.height : defaultHeight;
+            let currentWidth = typeof currentSize.width === 'number' ? currentSize.width : defaultWidth;
+            let heightChanged = Math.abs(currentHeight - measuredHeightPx) >= 0.5;
+            let widthChanged = Math.abs(currentWidth - defaultWidth) >= 0.5;
 
-            this.model.resize(defaultWidth, measuredHeightPx);
+            if (!heightChanged && !widthChanged) {
+                html.style.height = currentHeight + 'px';
+            } else {
+                html.style.height = measuredHeightPx + 'px';
+                this.model.resize(defaultWidth, measuredHeightPx);
+            }
+
+            if (!html.style.height)
+                html.style.height = measuredHeightPx + 'px';
 
             this.scheduleChoicePortAlignment();
         },
