@@ -1227,7 +1227,7 @@
             '        <div class="images-modal-actions">',
             '            <button type="button" class="images-modal-upload">Upload image</button>',
             '            <button type="button" class="images-modal-delete" disabled>Delete image</button>',
-            '            <span class="images-modal-hint">PNG, JPG, or GIF • Max 20 MB</span>',
+            '            <span class="images-modal-hint"></span>',
             '            <input type="file" class="images-modal-file" accept="image/*" hidden />',
             '        </div>',
             '        <p class="images-modal-empty">No images uploaded yet this session.</p>',
