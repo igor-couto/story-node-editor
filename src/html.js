@@ -868,8 +868,12 @@
     let zoomLevel = 1;
 
     function fitPaperToContent() {
-        paper.scaleContentToFit();
+        const fitPadding = 40;
+        paper.scaleContentToFit({
+            padding: fitPadding
+        });
         zoomLevel = paper.scale().sx;
+        center = paper.getArea().center();
     }
 
     let center = paper.getArea().center();
