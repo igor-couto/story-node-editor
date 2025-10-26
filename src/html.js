@@ -182,6 +182,12 @@
         if (!imageInfo || typeof imageInfo.dataUrl !== 'string')
             return null;
 
+        var maxBytes = 20 * 1024 * 1024; // 20 MB
+        if (typeof imageInfo.size === 'number' && imageInfo.size > maxBytes) {
+            console.warn('Skipping image registration because it exceeds the 20 MB limit.');
+            return null;
+        }
+
         var dataUrl = imageInfo.dataUrl;
         if (!dataUrl)
             return null;
@@ -204,12 +210,18 @@
 
         if (imagesModal && typeof imagesModal.refresh === 'function')
             imagesModal.refresh();
+        if (typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
+            window.storyNodeEditor.notifyImageUsageChange();
 
         return entry;
     };
 
     window.storyNodeEditor.openImageLibrary = function(options) {
         ensureImagesModal().open(options || {});
+    };
+    window.storyNodeEditor.notifyImageUsageChange = function() {
+        if (imagesModal && imagesModal.isOpen())
+            imagesModal.refresh();
     };
 
     var richTextEditor = createRichTextEditor();
@@ -1214,7 +1226,7 @@
             '    <div class="images-modal-body">',
             '        <div class="images-modal-actions">',
             '            <button type="button" class="images-modal-upload">Upload image</button>',
-            '            <span class="images-modal-hint">PNG, JPG, or GIF</span>',
+            '            <span class="images-modal-hint">PNG, JPG, or GIF • Max 20 MB</span>',
             '            <input type="file" class="images-modal-file" accept="image/*" hidden />',
             '        </div>',
             '        <p class="images-modal-empty">No images uploaded yet this session.</p>',
@@ -1232,6 +1244,7 @@
         var uploadInput = overlay.querySelector('.images-modal-file');
         var titleElement = overlay.querySelector('.images-modal-title');
         var hintElement = overlay.querySelector('.images-modal-hint');
+        var hintDefaultText = hintElement ? hintElement.textContent : '';
         var isOpen = false;
         var currentOptions = {};
         var isPickerMode = false;
@@ -1255,6 +1268,26 @@
                 return date.toLocaleString();
             } catch (err) {
                 return '';
+            }
+        }
+
+        function getImageUsageCount(dataUrl) {
+            if (!dataUrl || !graph)
+                return 0;
+            try {
+                var cells = graph.getCells();
+                var count = 0;
+                cells.forEach(function(cell) {
+                    if (cell && typeof cell.isElement === 'function' && cell.isElement()) {
+                        var nodeImage = cell.prop(['fields', 'image']);
+                        if (nodeImage && nodeImage === dataUrl)
+                            count++;
+                    }
+                });
+                return count;
+            } catch (err) {
+                console.warn('Unable to compute image usage count', err);
+                return 0;
             }
         }
 
@@ -1310,6 +1343,11 @@
                 var timestampText = formatTimestamp(entry.addedAt);
                 if (timestampText)
                     detailsParts.push(timestampText);
+                var usageCount = getImageUsageCount(entry.dataUrl);
+                if (usageCount > 0)
+                    detailsParts.push(usageCount === 1 ? 'Used by 1 node' : 'Used by ' + usageCount + ' nodes');
+                else
+                    detailsParts.push('Not used yet');
 
                 if (detailsParts.length) {
                     var metaDetails = document.createElement('div');
@@ -1397,6 +1435,9 @@
             currentOptions = options;
             isPickerMode = typeof options.onSelect === 'function';
 
+            if (hintElement)
+                hintElement.textContent = hintDefaultText;
+
             if (titleElement) {
                 var providedTitle = typeof options.title === 'string' && options.title.trim() ? options.title.trim() : null;
                 titleElement.textContent = providedTitle || (isPickerMode ? 'Select Image' : 'Uploaded Images');
@@ -1473,11 +1514,21 @@
                     uploadInput.value = '';
                     return;
                 }
+                var maxBytes = 20 * 1024 * 1024; // 20 MB
+                if (typeof file.size === 'number' && file.size > maxBytes) {
+                    console.warn('Selected image exceeds the 20 MB limit.');
+                    if (hintElement)
+                        hintElement.textContent = 'Image is too large (max 20 MB).';
+                    uploadInput.value = '';
+                    return;
+                }
                 var reader = new FileReader();
                 reader.onload = function(loadEvt) {
                     var dataUrl = typeof loadEvt.target.result === 'string' ? loadEvt.target.result : '';
                     if (!dataUrl)
                         return;
+                    if (hintElement)
+                        hintElement.textContent = hintDefaultText;
                     var entry = window.storyNodeEditor.registerImage({
                         dataUrl: dataUrl,
                         name: file && file.name ? file.name : '',

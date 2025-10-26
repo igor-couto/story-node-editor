@@ -412,6 +412,8 @@
                         if (!dataUrl)
                             return;
                         self.model.prop(['fields', 'image'], dataUrl);
+                        if (window.storyNodeEditor && typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
+                            window.storyNodeEditor.notifyImageUsageChange();
                     }
                 });
                 return;
@@ -434,6 +436,13 @@
             let file = input.files[0];
             if (!file) return;
 
+            let maxBytes = 20 * 1024 * 1024; // 20 MB
+            if (typeof file.size === 'number' && file.size > maxBytes) {
+                console.warn('Selected image exceeds the 20 MB limit.');
+                input.value = '';
+                return;
+            }
+
             if (file.type && file.type.indexOf('image/') !== 0) {
                 console.warn('Selected file is not an image.');
                 input.value = '';
@@ -453,6 +462,8 @@
                             addedAt: Date.now()
                         });
                     }
+                    if (window.storyNodeEditor && typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
+                        window.storyNodeEditor.notifyImageUsageChange();
                 }
             }.bind(this);
             reader.onerror = function(err) {
@@ -467,6 +478,8 @@
             this.model.prop(['fields', 'image'], '');
             if (this.imageInput)
                 this.imageInput.value = '';
+            if (window.storyNodeEditor && typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
+                window.storyNodeEditor.notifyImageUsageChange();
         },
 
         onImageLoad: function() {
