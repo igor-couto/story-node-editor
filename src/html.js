@@ -378,40 +378,51 @@
         passive: true
     });
 
-    document.getElementById('save').addEventListener('click', function() {
-        const payload = collectDiagramData();
+    (function() {
+        var saveButton = document.getElementById('save');
+        if (!saveButton)
+            return;
+        saveButton.addEventListener('click', function() {
+            const payload = collectDiagramData();
 
-        const apiUrl = 'https://localhost/api';
+            const apiUrl = 'https://localhost/api';
 
-        console.log(JSON.stringify(payload));
+            console.log(JSON.stringify(payload));
 
-        // Send the PUT request
-        fetch(apiUrl, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            })
-            .then(response => {
-                if (response.ok) {
-                    alert('Diagram saved successfully!');
-                } else {
-                    alert('Failed to save diagram.');
-                    console.error('Save failed:', response.statusText);
-                }
-            })
-            .catch(error => {
-                alert('An error occurred while saving the diagram.');
-                console.error('Save error:', error);
-            });
-    }, {
-        passive: true
-    });
+            // Send the PUT request
+            fetch(apiUrl, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => {
+                    if (response.ok) {
+                        alert('Diagram saved successfully!');
+                    } else {
+                        alert('Failed to save diagram.');
+                        console.error('Save failed:', response.statusText);
+                    }
+                })
+                .catch(error => {
+                    alert('An error occurred while saving the diagram.');
+                    console.error('Save error:', error);
+                });
+        }, {
+            passive: true
+        });
+    })();
     // *************** END-TOOLBAR ***************
 
     // *************** MOUSE WHEEL ZOOM ***************
     window.addEventListener('wheel', function(event) {
+        if (!paper || !paper.el)
+            return;
+
+        if (!paper.el.contains(event.target))
+            return;
+
         event.preventDefault();
 
         const cursorX = event.clientX;
@@ -437,7 +448,8 @@
         // Apply the zoom transformation at the local point
         paper.scaleUniformAtPoint(zoomLevel, localPoint);
     }, {
-        passive: false
+        passive: false,
+        capture: true
     });
     // *************** END-MOUSE WHEEL ZOOM ***************
 

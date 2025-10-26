@@ -45,15 +45,17 @@
                     },
                     out: {
                         position: {
-                            name: 'bottom'
+                            name: 'absolute'
                         },
                         attrs: {
                             portBody: {
                                 magnet: 'active',
                                 r: 10,
-                                cy: 25,
+                                cx: 0,
+                                cy: 20,
                                 fill: '#6363C7',
-                                stroke: '#565553'
+                                stroke: '#565553',
+                                'layer': 'overlay'
                             }
                         },
                     },
@@ -205,6 +207,22 @@
         initialize: function() {
             ElementView.prototype.initialize.apply(this, arguments);
             this._alignChoicePortsFrame = null;
+        },
+
+        getPaperScale: function() {
+            let defaultScale = {
+                sx: 1,
+                sy: 1
+            };
+            if (!this.paper || typeof this.paper.scale !== 'function')
+                return defaultScale;
+            let currentScale = this.paper.scale() || {};
+            let sx = typeof currentScale.sx === 'number' && currentScale.sx !== 0 ? currentScale.sx : 1;
+            let sy = typeof currentScale.sy === 'number' && currentScale.sy !== 0 ? currentScale.sy : sx;
+            return {
+                sx: sx,
+                sy: sy
+            };
         },
 
         confirmUpdate: function(flags) {
@@ -544,16 +562,24 @@
             if (!html)
                 return;
 
-            // Force a reflow to ensure layout reflects latest content (e.g., newly loaded images)
-            let previousDisplay = html.style.display;
-            html.style.display = 'block';
-            // Reading scrollHeight forces layout calculation
-            void html.scrollHeight;
-            html.style.display = previousDisplay;
+            // Trigger layout calculation so measurements are up-to-date
+            html.getBoundingClientRect();
 
-            // Use scroll metrics to account for content that might extend overflow (images, etc.)
             let width = Math.max(html.offsetWidth, html.scrollWidth);
             let height = Math.max(html.offsetHeight, html.scrollHeight);
+
+            let scale = this.getPaperScale();
+            if (scale.sx)
+                width = width / scale.sx;
+            if (scale.sy)
+                height = height / scale.sy;
+
+            // Fallback to existing size if measurements fail
+            let currentSize = this.model.get('size') || {};
+            if (!(width > 0) && typeof currentSize.width === 'number')
+                width = currentSize.width;
+            if (!(height > 0) && typeof currentSize.height === 'number')
+                height = currentSize.height;
 
             // Update the model size
             this.model.resize(width, height);
@@ -570,9 +596,11 @@
                 this._alignChoicePortsFrame = window.requestAnimationFrame(function() {
                     this._alignChoicePortsFrame = null;
                     this.alignChoicePorts();
+                    this.alignMainOutPort();
                 }.bind(this));
             } else {
                 this.alignChoicePorts();
+                this.alignMainOutPort();
             }
         },
 
@@ -591,8 +619,17 @@
             if (!ports.length)
                 return;
 
+            let scale = this.getPaperScale();
+            let scaleX = scale.sx || 1;
+            let scaleY = scale.sy || 1;
+
             let size = this.model.get('size') || {};
-            let nodeWidth = typeof size.width === 'number' ? size.width : (this.html.offsetWidth || 0);
+            let nodeWidth = typeof size.width === 'number' ? size.width : 0;
+            if (!(nodeWidth > 0)) {
+                nodeWidth = this.html ? this.html.offsetWidth : 0;
+                if (nodeWidth > 0 && scaleX)
+                    nodeWidth = nodeWidth / scaleX;
+            }
             if (!(nodeWidth > 0))
                 nodeWidth = 340;
 
@@ -619,9 +656,61 @@
                 let rect = target.getBoundingClientRect();
                 let offsetY = (rect.top + rect.height / 2) - htmlRect.top;
 
+                if (scaleY)
+                    offsetY = offsetY / scaleY;
+
                 this.model.portProp(entry.port.id, 'args/x', nodeWidth);
                 this.model.portProp(entry.port.id, 'args/y', offsetY);
             }, this);
+        },
+
+        alignMainOutPort: function() {
+            if (!this.html)
+                return;
+
+            let choices = this.model.prop(['fields', 'choices']) || [];
+            if (choices.length > 0)
+                return;
+
+            let outPort = this.model.getPorts().find(function(port) {
+                return port.group === 'out';
+            });
+            if (!outPort)
+                return;
+
+            let scale = this.getPaperScale();
+            let scaleX = scale.sx || 1;
+            let scaleY = scale.sy || 1;
+
+            let size = this.model.get('size') || {};
+            let nodeWidth = typeof size.width === 'number' ? size.width : 0;
+            if (!(nodeWidth > 0)) {
+                nodeWidth = this.html ? this.html.offsetWidth : 0;
+                if (nodeWidth > 0 && scaleX)
+                    nodeWidth = nodeWidth / scaleX;
+            }
+            if (!(nodeWidth > 0))
+                nodeWidth = 340;
+
+            let nodeHeight = typeof size.height === 'number' ? size.height : 0;
+            if (!(nodeHeight > 0)) {
+                nodeHeight = this.html ? this.html.offsetHeight : 0;
+                if (nodeHeight > 0 && scaleY)
+                    nodeHeight = nodeHeight / scaleY;
+            }
+            if (!(nodeHeight > 0))
+                nodeHeight = 260;
+
+            let offsetX = nodeWidth / 2;
+            if (!(offsetX > 0))
+                offsetX = nodeWidth || 170;
+
+            let offsetY = nodeHeight - 12;
+            if (!(offsetY > 0))
+                offsetY = Math.max(nodeHeight, 40);
+
+            this.model.portProp(outPort.id, 'args/x', offsetX);
+            this.model.portProp(outPort.id, 'args/y', offsetY);
         },
 
         onAddChoice: function(evt) {
@@ -642,9 +731,27 @@
             }
 
             let size = this.model.get('size') || {};
-            let nodeWidth = typeof size.width === 'number' ? size.width : (this.html ? this.html.offsetWidth : 0);
+            let scale = this.getPaperScale();
+            let scaleX = scale.sx || 1;
+            let scaleY = scale.sy || 1;
+
+            let nodeWidth = typeof size.width === 'number' ? size.width : 0;
+            if (!(nodeWidth > 0)) {
+                nodeWidth = this.html ? this.html.offsetWidth : 0;
+                if (nodeWidth > 0 && scaleX)
+                    nodeWidth = nodeWidth / scaleX;
+            }
             if (!(nodeWidth > 0))
                 nodeWidth = 340;
+
+            let nodeHeight = typeof size.height === 'number' ? size.height : 0;
+            if (!(nodeHeight > 0)) {
+                nodeHeight = this.html ? this.html.offsetHeight : 0;
+                if (nodeHeight > 0 && scaleY)
+                    nodeHeight = nodeHeight / scaleY;
+            }
+            if (!(nodeHeight > 0))
+                nodeHeight = 200 + ((choices.length - 1) * 40);
 
             this.model.addPort({
                 //id: joint.util.uuid(), 
@@ -652,7 +759,7 @@
                 group: 'choiceOut',
                 args: {
                     x: nodeWidth,
-                    y: 247 + ((choices.length - 1) * 40),
+                    y: nodeHeight,
                 }
             });
 
