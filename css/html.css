@@ -337,10 +337,10 @@ body.richtext-open .node-label {
 
 .richtext-title-row {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    align-items: center;
+    gap: 12px;
     padding: 20px 24px 12px 24px;
-    background-color: #FFFFFF;
+    background-color: #F4F4F4;
     border-bottom: 1px solid #DCDCDC;
 }
 
@@ -350,6 +350,8 @@ body.richtext-open .node-label {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: #6B6B6B;
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .richtext-title-input {
@@ -360,6 +362,8 @@ body.richtext-open .node-label {
     border-radius: 6px;
     background-color: #FFFFFF;
     color: #222222;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .richtext-title-input:focus {
@@ -376,7 +380,7 @@ body.richtext-open .node-label {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 20px 24px;
+    padding: 12px 24px;
     background-color: #F4F4F4;
     border-bottom: 1px solid #DCDCDC;
 }
@@ -446,7 +450,6 @@ body.richtext-open .node-label {
 }
 
 .richtext-close {
-
     width: 40px;
     height: 40px;
     border: 1px solid transparent;
@@ -459,6 +462,8 @@ body.richtext-open .node-label {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    margin-left: auto;
+    flex-shrink: 0;
 }
 
 .richtext-close:hover,
