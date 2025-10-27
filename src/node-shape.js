@@ -210,6 +210,7 @@
             this._choiceSyncUnlockHandle = null;
             this._isSyncingChoices = false;
             this.currentChoices = [];
+            this._pendingChoiceSnapshot = null;
             let size = this.model.get('size') || {};
             let defaultWidth = typeof size.width === 'number' && size.width > 0 ? size.width : 340;
             let defaultHeight = typeof size.height === 'number' && size.height > 0 ? size.height : 280;
@@ -329,6 +330,7 @@
             this.choiceInputs = [];
             this.baseChoicesHeight = this.choicesContainer ? this.choicesContainer.scrollHeight : 0;
             this.currentChoices = this._normalizeChoices();
+            this._pendingChoiceSnapshot = this.currentChoices.slice();
             this.renderChoices(this.currentChoices);
             this.syncChoicePorts(this.currentChoices);
         },
@@ -352,6 +354,7 @@
                 this._choiceSyncUnlockHandle = null;
             }
             this.currentChoices = [];
+            this._pendingChoiceSnapshot = null;
         },
 
         updateHTML: function() {
@@ -610,7 +613,17 @@
             }.bind(this));
 
             if (!this._isSyncingChoices) {
-                this.currentChoices = this._normalizeChoices();
+                const modelChoices = this.model.prop(['fields', 'choices']);
+                console.debug('[updateFields raw fields.choices]', this.model.id, modelChoices);
+                const normalized = this._normalizeChoices(modelChoices);
+                if (this._pendingChoiceSnapshot && !this._choicesEqual(normalized, this._pendingChoiceSnapshot)) {
+                    console.debug('[updateFields mismatch -> resync]', this.model.id, normalized, this._pendingChoiceSnapshot);
+                    this.setChoices(this._pendingChoiceSnapshot.slice());
+                    return;
+                }
+                this.currentChoices = normalized;
+                if (!this._pendingChoiceSnapshot || !this._choicesEqual(this._pendingChoiceSnapshot, this.currentChoices))
+                    this._pendingChoiceSnapshot = this.currentChoices.slice();
                 console.debug('[updateFields sync]', this.model.id, this.currentChoices);
                 this.renderChoices(this.currentChoices);
                 this.syncChoicePorts(this.currentChoices);
@@ -653,6 +666,8 @@
 
             let choices = this._normalizeChoices(choicesOverride);
             this.currentChoices = choices.slice();
+            if (!this._pendingChoiceSnapshot || !this._choicesEqual(this._pendingChoiceSnapshot, this.currentChoices))
+                this._pendingChoiceSnapshot = this.currentChoices.slice();
             console.debug('[renderChoices]', this.model.id, choices);
 
             choicesContainer.innerHTML = '';
@@ -690,6 +705,8 @@
         syncChoicePorts: function(choicesOverride) {
             let choices = this._normalizeChoices(choicesOverride);
             this.currentChoices = choices.slice();
+            if (!this._pendingChoiceSnapshot || !this._choicesEqual(this._pendingChoiceSnapshot, this.currentChoices))
+                this._pendingChoiceSnapshot = this.currentChoices.slice();
             let desiredCount = choices.length;
             let orderedPorts = this.getChoicePortsOrdered();
 
@@ -754,9 +771,24 @@
                     this.currentChoices = snapshot.slice();
                 else
                     this.currentChoices = this._normalizeChoices();
+                this._pendingChoiceSnapshot = this.currentChoices.slice();
             }.bind(this);
 
             this._choiceSyncUnlockHandle = schedule(unlock, 0);
+        },
+
+        _choicesEqual: function(a, b) {
+            if (a === b)
+                return true;
+            if (!Array.isArray(a) || !Array.isArray(b))
+                return false;
+            if (a.length !== b.length)
+                return false;
+            for (let i = 0; i < a.length; i++) {
+                if (a[i] !== b[i])
+                    return false;
+            }
+            return true;
         },
 
         getChoicePortPlacementDimensions: function(choiceCount) {
@@ -1064,7 +1096,7 @@
 
             this.renderChoices(this.currentChoices);
             this.syncChoicePorts(this.currentChoices);
-            this.scheduleChoiceSyncUnlock(this.currentChoices);
+            this.scheduleChoiceSyncUnlock(this.currentChoices.slice());
         },
 
         getChoicePortsOrdered: function() {
