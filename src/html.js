@@ -168,7 +168,7 @@
         return convertMarkdownToHtml(markdownText || '');
     };
 
-    var defaultApiBaseUrl = 'https://localhost/api';
+    var defaultApiBaseUrl = 'http://localhost:5067/api';
     var resolvedApiBaseUrl = (typeof window.storyNodeEditor.apiBaseUrl === 'string' && window.storyNodeEditor.apiBaseUrl.trim()) ? window.storyNodeEditor.apiBaseUrl.trim() : defaultApiBaseUrl;
     resolvedApiBaseUrl = resolvedApiBaseUrl.replace(/\/+$/, '');
     window.storyNodeEditor.apiBaseUrl = resolvedApiBaseUrl;
@@ -755,7 +755,6 @@
         handleGraphMutation('graph-reset', opt);
     });
 
-    // TODO: Logic to remove ports
     graph.on('remove', function(cell, collection, opt) {
         if (cell && typeof cell.isLink === 'function' && cell.isLink() && opt && opt.ui) {
             const target = this.getCell(cell.target().id);
@@ -2333,6 +2332,7 @@
 
         // Map node IDs to their data for easy lookup
         const nodeDataMap = {};
+        const nodeModelMap = {};
 
         // First pass: Process nodes and initialize nodeDataMap
         nodes.forEach(node => {
@@ -2372,6 +2372,7 @@
 
             // Store the node data
             nodeDataMap[nodeId] = nodeData;
+            nodeModelMap[nodeId] = node;
         });
 
         // Second pass: Process links to determine the next nodes
@@ -2385,15 +2386,27 @@
                 if (!sourceNode) return;
 
                 if (sourceNode.choices !== undefined) {
-                    // The node has choices; associate the link with the correct choice
-                    // Extract the index from the port ID (e.g., 'choice1_...')
-                    const portId = sourcePort;
-                    const match = portId.match(/^choice(\d+)_/);
-                    if (match) {
-                        const choiceIndex = parseInt(match[1], 10) - 1;
-                        if (sourceNode.choices[choiceIndex]) {
-                            sourceNode.choices[choiceIndex].nextStoryNodeId = targetId;
+                    const sourceModelNode = nodeModelMap[sourceId];
+                    let choiceIndex = null;
+                    if (sourceModelNode && typeof sourcePort === 'string') {
+                        const portConfig = sourceModelNode.getPort(sourcePort);
+                        if (portConfig && portConfig.choiceIndex !== undefined && portConfig.choiceIndex !== null) {
+                            const parsedIndex = parseInt(portConfig.choiceIndex, 10);
+                            if (!isNaN(parsedIndex))
+                                choiceIndex = parsedIndex;
                         }
+                    }
+                    if (choiceIndex === null) {
+                        const portId = typeof sourcePort === 'string' ? sourcePort : '';
+                        const match = portId.match(/^choice(\d+)_/);
+                        if (match) {
+                            const parsedFromId = parseInt(match[1], 10) - 1;
+                            if (!isNaN(parsedFromId))
+                                choiceIndex = parsedFromId;
+                        }
+                    }
+                    if (choiceIndex !== null && sourceNode.choices[choiceIndex]) {
+                        sourceNode.choices[choiceIndex].nextStoryNodeId = targetId;
                     }
                 } else {
                     // For nodes without choices, set nextStoryNodeId

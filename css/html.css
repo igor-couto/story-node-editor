@@ -275,6 +275,7 @@ body.richtext-open .node-label {
     display: flex;
     align-items: center;
     margin-bottom: 8px;
+    gap: 8px;
 }
 
 .choice input[type="text"] {
@@ -285,6 +286,25 @@ body.richtext-open .node-label {
     outline: none;
     font-size: 14px;
     color: #333;
+}
+
+.choice-remove-button {
+    padding: 6px 10px;
+    background-color: transparent;
+    border: 1px solid #727272;
+    border-radius: 4px;
+    color: #FFFFFF;
+    cursor: url('../assets/default.png'), default;
+    font-size: 12px;
+    line-height: 1;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.choice-remove-button:hover,
+.choice-remove-button:focus {
+    background-color: #4e4e4e;
+    border-color: #9a9a9a;
+    color: #FFFFFF;
 }
 
 .toolbar {

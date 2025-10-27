@@ -51,8 +51,8 @@
                             portBody: {
                                 magnet: 'active',
                                 r: 10,
-                                cx: 0,
-                                cy: 20,
+                                cx: 170,
+                                cy: 340,
                                 fill: '#6363C7',
                                 stroke: '#565553',
                                 'layer': 'overlay'
@@ -207,6 +207,9 @@
         initialize: function() {
             ElementView.prototype.initialize.apply(this, arguments);
             this._alignChoicePortsFrame = null;
+            this._choiceSyncUnlockHandle = null;
+            this._isSyncingChoices = false;
+            this.currentChoices = [];
             let size = this.model.get('size') || {};
             let defaultWidth = typeof size.width === 'number' && size.width > 0 ? size.width : 340;
             let defaultHeight = typeof size.height === 'number' && size.height > 0 ? size.height : 280;
@@ -279,10 +282,12 @@
 
             // Attach event listener to the choices container for input events
             this.choicesContainer = html.querySelector('.choices-container');
-            if (this.choicesContainer)
+            if (this.choicesContainer) {
                 this.choicesContainer.addEventListener('input', this.onChoiceInput.bind(this), {
                     passive: true
                 });
+                this.choicesContainer.addEventListener('click', this.onChoiceContainerClick.bind(this));
+            }
 
             this.imageButton = html.querySelector('.node-image-button');
             if (this.imageButton)
@@ -321,9 +326,11 @@
             this.fields = fields;
             html.setAttribute('model-id', this.model.id);
 
+            this.choiceInputs = [];
             this.baseChoicesHeight = this.choicesContainer ? this.choicesContainer.scrollHeight : 0;
-
-            this.html = html;
+            this.currentChoices = this._normalizeChoices();
+            this.renderChoices(this.currentChoices);
+            this.syncChoicePorts(this.currentChoices);
         },
 
         removeHTMLMarkup: function() {
@@ -337,6 +344,14 @@
             this.imageInput = null;
             this.imageDisplay = null;
             this.imageElement = null;
+            this.choicesContainer = null;
+            this.choiceInputs = [];
+            if (this._choiceSyncUnlockHandle != null) {
+                let clear = typeof window !== 'undefined' && typeof window.clearTimeout === 'function' ? window.clearTimeout : clearTimeout;
+                clear(this._choiceSyncUnlockHandle);
+                this._choiceSyncUnlockHandle = null;
+            }
+            this.currentChoices = [];
         },
 
         updateHTML: function() {
@@ -594,7 +609,12 @@
                 }
             }.bind(this));
 
-            this.updateChoices();
+            if (!this._isSyncingChoices) {
+                this.currentChoices = this._normalizeChoices();
+                console.debug('[updateFields sync]', this.model.id, this.currentChoices);
+                this.renderChoices(this.currentChoices);
+                this.syncChoicePorts(this.currentChoices);
+            }
         },
 
         updateContentClampState: function(field) {
@@ -623,50 +643,152 @@
                 setTimeout(evaluateClamp, 0);
         },
 
-        updateChoices: function() {
+        renderChoices: function(choicesOverride) {
+            if (!this.html)
+                return;
+
             let choicesContainer = this.html.querySelector('.choices-container');
-            let choices = this.model.prop(['fields', 'choices']) || [];
+            if (!choicesContainer)
+                return;
 
-            // Initialize choiceInputs array if it doesn't exist
-            if (!this.choiceInputs)
-                this.choiceInputs = [];
+            let choices = this._normalizeChoices(choicesOverride);
+            this.currentChoices = choices.slice();
+            console.debug('[renderChoices]', this.model.id, choices);
 
-            // If the number of choices has changed, re-create inputs
-            if (choices.length !== this.choiceInputs.length) {
-                // Clear existing choices
-                choicesContainer.innerHTML = '';
-                this.choiceInputs = [];
+            choicesContainer.innerHTML = '';
+            this.choiceInputs = [];
 
-                choices.forEach(function(choice, index) {
-                    let choiceDiv = document.createElement('div');
-                    choiceDiv.className = 'choice';
+            choices.forEach(function(choice, index) {
+                let choiceDiv = document.createElement('div');
+                choiceDiv.className = 'choice';
+                choiceDiv.dataset.index = index;
 
-                    let input = document.createElement('input');
-                    input.type = 'text';
-                    input.className = 'choice-input';
-                    input.value = choice;
-                    input.dataset.index = index;
-                    input.placeholder = `Choice ${index + 1}`;
+                let input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'choice-input';
+                input.value = choice;
+                input.dataset.index = index;
+                input.placeholder = `Choice ${index + 1}`;
 
-                    choiceDiv.appendChild(input);
-                    choicesContainer.appendChild(choiceDiv);
+                choiceDiv.appendChild(input);
 
-                    // Store reference to input
-                    this.choiceInputs.push(input);
-                }, this);
+                let removeButton = document.createElement('button');
+                removeButton.type = 'button';
+                removeButton.className = 'choice-remove-button';
+                removeButton.dataset.index = index;
+                removeButton.setAttribute('aria-label', `Remove choice ${index + 1}`);
+                removeButton.textContent = 'x';
+                choiceDiv.appendChild(removeButton);
 
-                // Adjust node size
-                this.adjustNodeSize();
-            } else {
-                // Update values of existing inputs
-                choices.forEach(function(choice, index) {
-                    let input = this.choiceInputs[index];
-                    input.value = choice;
-                }, this);
-            }
+                choicesContainer.appendChild(choiceDiv);
+                this.choiceInputs.push(input);
+            }, this);
 
             this.adjustNodeSize();
+        },
+
+        syncChoicePorts: function(choicesOverride) {
+            let choices = this._normalizeChoices(choicesOverride);
+            this.currentChoices = choices.slice();
+            let desiredCount = choices.length;
+            let orderedPorts = this.getChoicePortsOrdered();
+
+            if (desiredCount === 0) {
+                if (orderedPorts.length) {
+                    orderedPorts.forEach(function(port) {
+                        this.model.removePort(port.id);
+                    }, this);
+                }
+                this.ensureMainOutPort();
+                this.scheduleChoicePortAlignment();
+                return;
+            }
+
+            this.removeMainOutPort();
+            orderedPorts = this.getChoicePortsOrdered();
+
+            let placement = this.getChoicePortPlacementDimensions(desiredCount);
+
+            while (orderedPorts.length < desiredCount) {
+                this.model.addPort({
+                    id: this.getNextChoicePortId(),
+                    group: 'choiceOut',
+                    args: {
+                        x: placement.nodeWidth,
+                        y: placement.nodeHeight
+                    }
+                });
+                orderedPorts = this.getChoicePortsOrdered();
+            }
+
+            while (orderedPorts.length > desiredCount) {
+                let port = orderedPorts.pop();
+                if (port)
+                    this.model.removePort(port.id);
+            }
+
             this.scheduleChoicePortAlignment();
+        },
+
+        _normalizeChoices: function(source) {
+            let raw = Array.isArray(source) ? source : (this.model.prop(['fields', 'choices']) || []);
+            let normalized = raw.map(function(choice) {
+                return typeof choice === 'string' ? choice : '';
+            });
+            return normalized;
+        },
+
+        scheduleChoiceSyncUnlock: function(snapshot) {
+            let schedule = typeof window !== 'undefined' && typeof window.setTimeout === 'function' ? window.setTimeout : setTimeout;
+            let clear = typeof window !== 'undefined' && typeof window.clearTimeout === 'function' ? window.clearTimeout : clearTimeout;
+
+            if (this._choiceSyncUnlockHandle != null) {
+                clear(this._choiceSyncUnlockHandle);
+                this._choiceSyncUnlockHandle = null;
+            }
+
+            let unlock = function() {
+                this._choiceSyncUnlockHandle = null;
+                this._isSyncingChoices = false;
+                if (Array.isArray(snapshot))
+                    this.currentChoices = snapshot.slice();
+                else
+                    this.currentChoices = this._normalizeChoices();
+            }.bind(this);
+
+            this._choiceSyncUnlockHandle = schedule(unlock, 0);
+        },
+
+        getChoicePortPlacementDimensions: function(choiceCount) {
+            let size = this.model.get('size') || {};
+            let scale = this.getPaperScale();
+            let scaleX = scale.sx || 1;
+            let scaleY = scale.sy || 1;
+
+            let nodeWidth = typeof size.width === 'number' ? size.width : 0;
+            if (!(nodeWidth > 0)) {
+                nodeWidth = this.html ? this.html.offsetWidth : 0;
+                if (nodeWidth > 0 && scaleX)
+                    nodeWidth = nodeWidth / scaleX;
+            }
+            if (!(nodeWidth > 0))
+                nodeWidth = 340;
+
+            let nodeHeight = typeof size.height === 'number' ? size.height : 0;
+            if (!(nodeHeight > 0)) {
+                nodeHeight = this.html ? this.html.offsetHeight : 0;
+                if (nodeHeight > 0 && scaleY)
+                    nodeHeight = nodeHeight / scaleY;
+            }
+            if (!(nodeHeight > 0)) {
+                let base = 200;
+                nodeHeight = base + Math.max(0, (choiceCount - 1) * 40);
+            }
+
+            return {
+                nodeWidth: nodeWidth,
+                nodeHeight: nodeHeight
+            };
         },
 
         adjustNodeSize: function() {
@@ -731,11 +853,8 @@
             if (!choiceElements.length)
                 return;
 
-            let ports = this.model.getPorts().filter(function(port) {
-                return port.group === 'choiceOut';
-            });
-
-            if (!ports.length)
+            let orderedPorts = this.getChoicePortsOrdered();
+            if (!orderedPorts.length)
                 return;
 
             let scale = this.getPaperScale();
@@ -754,22 +873,12 @@
 
             let htmlRect = this.html.getBoundingClientRect();
 
-            let mappedPorts = ports.map(function(port) {
-                let match = port.id && port.id.match(/^choice(\d+)_/);
-                return {
-                    port: port,
-                    index: match ? parseInt(match[1], 10) - 1 : null
-                };
-            }).filter(function(entry) {
-                return entry.index !== null && !isNaN(entry.index);
-            }).sort(function(a, b) {
-                return a.index - b.index;
-            });
-
-            mappedPorts.forEach(function(entry) {
-                let choiceElement = choiceElements[entry.index];
-                if (!choiceElement)
-                    return;
+            let limit = Math.min(orderedPorts.length, choiceElements.length);
+            for (let idx = 0; idx < limit; idx++) {
+                let port = orderedPorts[idx];
+                let choiceElement = choiceElements[idx];
+                if (!choiceElement || !port)
+                    continue;
 
                 let target = choiceElement.querySelector('.choice-input') || choiceElement;
                 let rect = target.getBoundingClientRect();
@@ -778,16 +887,23 @@
                 if (scaleY)
                     offsetY = offsetY / scaleY;
 
-                this.model.portProp(entry.port.id, 'args/x', nodeWidth);
-                this.model.portProp(entry.port.id, 'args/y', offsetY);
-            }, this);
+                this.model.portProp(port.id, 'args/x', nodeWidth);
+                this.model.portProp(port.id, 'args/y', offsetY);
+                this.model.portProp(port.id, 'choiceIndex', idx);
+            }
+
+            for (let idx = limit; idx < orderedPorts.length; idx++) {
+                let port = orderedPorts[idx];
+                if (port && port.id)
+                    this.model.portProp(port.id, 'choiceIndex', null);
+            }
         },
 
         alignMainOutPort: function() {
             if (!this.html)
                 return;
 
-            let choices = this.model.prop(['fields', 'choices']) || [];
+            let choices = Array.isArray(this.currentChoices) ? this.currentChoices : [];
             if (choices.length > 0)
                 return;
 
@@ -834,74 +950,164 @@
 
         onAddChoice: function(evt) {
             evt.preventDefault();
+            evt.stopPropagation();
 
-            // Get the current choices from the model
-            let choices = this.model.prop(['fields', 'choices']) || [];
-            // Create a copy and add a new empty choice
-            choices = choices.slice();
-            choices.push('');
-            // Update the model's choices
-            this.model.prop(['fields', 'choices'], choices);
-
-            // Remove the main out port if it's present, like in the case of the first choice being added
-            let outPort = this.model.getPorts().filter(port => port.group === 'out');
-            if (outPort[0]) {
-                this.model.removePort(outPort[0].id);
-            }
-
-            let size = this.model.get('size') || {};
-            let scale = this.getPaperScale();
-            let scaleX = scale.sx || 1;
-            let scaleY = scale.sy || 1;
-
-            let nodeWidth = typeof size.width === 'number' ? size.width : 0;
-            if (!(nodeWidth > 0)) {
-                nodeWidth = this.html ? this.html.offsetWidth : 0;
-                if (nodeWidth > 0 && scaleX)
-                    nodeWidth = nodeWidth / scaleX;
-            }
-            if (!(nodeWidth > 0))
-                nodeWidth = 340;
-
-            let nodeHeight = typeof size.height === 'number' ? size.height : 0;
-            if (!(nodeHeight > 0)) {
-                nodeHeight = this.html ? this.html.offsetHeight : 0;
-                if (nodeHeight > 0 && scaleY)
-                    nodeHeight = nodeHeight / scaleY;
-            }
-            if (!(nodeHeight > 0))
-                nodeHeight = 200 + ((choices.length - 1) * 40);
-
-            this.model.addPort({
-                //id: joint.util.uuid(), 
-                id: 'choice' + (choices.length) + '_' + this.model.id,
-                group: 'choiceOut',
-                args: {
-                    x: nodeWidth,
-                    y: nodeHeight,
-                }
-            });
-
-            this.scheduleChoicePortAlignment();
-
-            console.log('ports:', this.model.getPorts());
+            let nextChoices = this.currentChoices.slice();
+            nextChoices.push('');
+            console.debug('[onAddChoice]', this.model.id, nextChoices);
+            this.setChoices(nextChoices);
         },
 
         // Handle input changes in choice fields
         onChoiceInput: function(evt) {
             let input = evt.target;
             if (input.classList.contains('choice-input')) {
-                let index = input.dataset.index;
+                let index = parseInt(input.dataset.index, 10);
+                if (isNaN(index))
+                    return;
 
-                // Get the current choices
-                let choices = this.model.prop(['fields', 'choices']) || [];
+                if (index < 0 || index >= this.currentChoices.length)
+                    return;
 
-                // Create a copy and update the specific choice
-                choices = choices.slice();
-                choices[index] = input.value;
+                let nextChoices = this.currentChoices.slice();
+                nextChoices[index] = input.value;
+                this.setChoices(nextChoices);
+            }
+        },
 
-                // Update the model's choices
-                this.model.prop(['fields', 'choices'], choices);
+        onChoiceContainerClick: function(evt) {
+            let target = evt.target;
+            while (target && target !== this.choicesContainer) {
+                if (target.classList && target.classList.contains('choice-remove-button')) {
+                    evt.preventDefault();
+                    evt.stopPropagation();
+                    let index = parseInt(target.dataset.index, 10);
+                    console.debug('[removeChoice click]', this.model.id, index, this.currentChoices);
+                    if (!isNaN(index))
+                        this.removeChoiceAt(index);
+                    return;
+                }
+                target = target.parentElement;
+            }
+        },
+
+        removeChoiceAt: function(index) {
+            if (!(Array.isArray(this.currentChoices) && index >= 0 && index < this.currentChoices.length))
+                return;
+
+            this.removeChoicePortAt(index);
+
+            let nextChoices = this.currentChoices.slice();
+            nextChoices.splice(index, 1);
+            console.debug('[removeChoiceAt]', this.model.id, index, this.currentChoices, nextChoices);
+            this.setChoices(nextChoices);
+        },
+
+        removeChoicePortAt: function(index) {
+            if (typeof index !== 'number' || index < 0)
+                return;
+
+            let choicePorts = this.getChoicePortsOrdered();
+
+            let portToRemove = choicePorts[index];
+            if (!portToRemove)
+                return;
+
+            this.model.removePort(portToRemove.id);
+        },
+
+        ensureMainOutPort: function() {
+            let existingOutPort = this.model.getPorts().find(function(port) {
+                return port.group === 'out';
+            });
+
+            if (!existingOutPort) {
+                this.model.addPort({
+                    id: `out_${this.model.id}`,
+                    group: 'out',
+                    args: {
+                        x: 0,
+                        y: 0
+                    }
+                });
+            }
+
+            this.alignMainOutPort();
+        },
+
+        removeMainOutPort: function() {
+            let outPorts = this.model.getPorts().filter(function(port) {
+                return port.group === 'out';
+            });
+
+            outPorts.forEach(function(port) {
+                this.model.removePort(port.id);
+            }, this);
+        },
+
+        setChoices: function(nextChoices) {
+            let normalized = this._normalizeChoices(nextChoices);
+            let identical = normalized.length === this.currentChoices.length && normalized.every(function(value, index) {
+                return value === this.currentChoices[index];
+            }, this);
+            if (identical) {
+                console.debug('[setChoices identical]', this.model.id, normalized);
+                this.renderChoices(normalized);
+                this.syncChoicePorts(normalized);
+                return;
+            }
+
+            this.currentChoices = normalized.slice();
+            this._isSyncingChoices = true;
+            this.model.prop(['fields', 'choices'], this.currentChoices.slice());
+            console.debug('[setChoices stored]', this.model.id, this.model.prop(['fields', 'choices']));
+
+            this.renderChoices(this.currentChoices);
+            this.syncChoicePorts(this.currentChoices);
+            this.scheduleChoiceSyncUnlock(this.currentChoices);
+        },
+
+        getChoicePortsOrdered: function() {
+            let ports = this.model.getPorts().filter(function(port) {
+                return port.group === 'choiceOut';
+            });
+
+            return ports.map(function(port, index) {
+                let choiceIndex = port && port.choiceIndex;
+                if (typeof choiceIndex === 'string')
+                    choiceIndex = parseInt(choiceIndex, 10);
+                if (!(typeof choiceIndex === 'number' && !isNaN(choiceIndex))) {
+                    let match = port && port.id && port.id.match(/^choice(\d+)_/);
+                    if (match)
+                        choiceIndex = parseInt(match[1], 10) - 1;
+                }
+                if (!(typeof choiceIndex === 'number' && !isNaN(choiceIndex)))
+                    choiceIndex = index;
+                return {
+                    port: port,
+                    index: choiceIndex
+                };
+            }).sort(function(a, b) {
+                return a.index - b.index;
+            }).map(function(entry) {
+                return entry.port;
+            });
+        },
+
+        getNextChoicePortId: function() {
+            let existingIds = {};
+            this.model.getPorts().forEach(function(port) {
+                if (port && port.group === 'choiceOut' && port.id)
+                    existingIds[port.id] = true;
+            });
+
+            let suffix = 1;
+            let candidateId = '';
+            while (true) {
+                candidateId = 'choice' + suffix + '_' + this.model.id;
+                if (!existingIds[candidateId])
+                    return candidateId;
+                suffix += 1;
             }
         },
 
