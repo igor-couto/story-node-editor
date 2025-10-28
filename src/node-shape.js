@@ -219,6 +219,9 @@
                 height: defaultHeight
             };
             this.baseChoicesHeight = 0;
+            this.baseOutPortPosition = this._readMainOutPortBasePosition();
+            this.baseOutPortDelta = this._computeMainOutPortDelta(this.baseOutPortPosition);
+            this.listenTo(this.model, 'change:size', this.onModelSizeChange);
         },
 
         getPaperScale: function() {
@@ -877,6 +880,73 @@
             }
         },
 
+        onModelSizeChange: function() {
+            this.scheduleChoicePortAlignment();
+        },
+
+        _parsePortCoordinate: function(value, fallback) {
+            if (typeof value === 'number' && isFinite(value))
+                return value;
+            if (typeof value === 'string') {
+                let parsed = parseFloat(value);
+                if (!isNaN(parsed))
+                    return parsed;
+            }
+            return fallback;
+        },
+
+        _readMainOutPortBasePosition: function() {
+            let defaultWidth = (this.defaultSize && typeof this.defaultSize.width === 'number' && this.defaultSize.width > 0) ? this.defaultSize.width : 340;
+            let defaultHeight = (this.defaultSize && typeof this.defaultSize.height === 'number' && this.defaultSize.height > 0) ? this.defaultSize.height : 280;
+            let fallback = {
+                x: defaultWidth / 2,
+                y: defaultHeight
+            };
+
+            if (!this.model || typeof this.model.getPorts !== 'function')
+                return fallback;
+
+            let outPort = this.model.getPorts().find(function(port) {
+                return port.group === 'out';
+            });
+            if (!outPort || !outPort.attrs || !outPort.attrs.portBody)
+                return fallback;
+
+            let attrs = outPort.attrs.portBody;
+            let baseX = this._parsePortCoordinate(attrs.cx, fallback.x);
+            let baseY = this._parsePortCoordinate(attrs.cy, fallback.y);
+
+            return {
+                x: baseX,
+                y: baseY
+            };
+        },
+
+        _computeMainOutPortDelta: function(basePosition) {
+            let defaultWidth = (this.defaultSize && typeof this.defaultSize.width === 'number' && this.defaultSize.width > 0) ? this.defaultSize.width : 0;
+            let defaultHeight = (this.defaultSize && typeof this.defaultSize.height === 'number' && this.defaultSize.height > 0) ? this.defaultSize.height : 0;
+
+            let deltaX = 0;
+            if (basePosition && typeof basePosition.x === 'number' && isFinite(basePosition.x) && defaultWidth > 0)
+                deltaX = basePosition.x - (defaultWidth / 2);
+
+            let deltaY = 0;
+            if (basePosition && typeof basePosition.y === 'number' && isFinite(basePosition.y) && defaultHeight > 0)
+                deltaY = basePosition.y - defaultHeight;
+
+            return {
+                x: deltaX,
+                y: deltaY + 5
+            };
+        },
+
+        _ensureMainOutPortAttrs: function(outPort) {
+            if (!outPort || !outPort.id)
+                return;
+            this.model.portProp(outPort.id, 'attrs/portBody/cx', 0);
+            this.model.portProp(outPort.id, 'attrs/portBody/cy', 0);
+        },
+
         alignChoicePorts: function() {
             if (!this.html)
                 return;
@@ -932,50 +1002,59 @@
         },
 
         alignMainOutPort: function() {
-            if (!this.html)
-                return;
-
-            let choices = Array.isArray(this.currentChoices) ? this.currentChoices : [];
-            if (choices.length > 0)
-                return;
-
             let outPort = this.model.getPorts().find(function(port) {
                 return port.group === 'out';
             });
             if (!outPort)
                 return;
 
-            let scale = this.getPaperScale();
-            let scaleX = scale.sx || 1;
-            let scaleY = scale.sy || 1;
+            let choices = Array.isArray(this.currentChoices) ? this.currentChoices : [];
+            if (choices.length > 0)
+                return;
 
-            let size = this.model.get('size') || {};
-            let nodeWidth = typeof size.width === 'number' ? size.width : 0;
-            if (!(nodeWidth > 0)) {
-                nodeWidth = this.html ? this.html.offsetWidth : 0;
-                if (nodeWidth > 0 && scaleX)
-                    nodeWidth = nodeWidth / scaleX;
+            let basePosition = this.baseOutPortPosition || {
+                x: (this.defaultSize && typeof this.defaultSize.width === 'number' && this.defaultSize.width > 0) ? this.defaultSize.width / 2 : 170,
+                y: (this.defaultSize && typeof this.defaultSize.height === 'number' && this.defaultSize.height > 0) ? this.defaultSize.height : 340
+            };
+            let baseDelta = this.baseOutPortDelta || {
+                x: 0,
+                y: 0
+            };
+            let deltaX = (typeof baseDelta.x === 'number' && isFinite(baseDelta.x)) ? baseDelta.x : 0;
+            let deltaY = (typeof baseDelta.y === 'number' && isFinite(baseDelta.y)) ? baseDelta.y : 0;
+
+            let offsetX = basePosition.x;
+            let offsetY = basePosition.y;
+
+            if (this.html) {
+                let scale = this.getPaperScale();
+                let scaleX = scale.sx || 1;
+                let scaleY = scale.sy || 1;
+
+                let size = this.model.get('size') || {};
+                let nodeWidth = typeof size.width === 'number' ? size.width : 0;
+                if (!(nodeWidth > 0)) {
+                    nodeWidth = this.html ? this.html.offsetWidth : 0;
+                    if (nodeWidth > 0 && scaleX)
+                        nodeWidth = nodeWidth / scaleX;
+                }
+                if (!(nodeWidth > 0))
+                    nodeWidth = (this.defaultSize && typeof this.defaultSize.width === 'number' && this.defaultSize.width > 0) ? this.defaultSize.width : basePosition.x * 2;
+
+                let nodeHeight = typeof size.height === 'number' ? size.height : 0;
+                if (!(nodeHeight > 0)) {
+                    nodeHeight = this.html ? this.html.offsetHeight : 0;
+                    if (nodeHeight > 0 && scaleY)
+                        nodeHeight = nodeHeight / scaleY;
+                }
+                if (!(nodeHeight > 0))
+                    nodeHeight = (this.defaultSize && typeof this.defaultSize.height === 'number' && this.defaultSize.height > 0) ? this.defaultSize.height : basePosition.y;
+
+                offsetX = (nodeWidth / 2) + deltaX;
+                offsetY = nodeHeight + deltaY;
             }
-            if (!(nodeWidth > 0))
-                nodeWidth = 340;
 
-            let nodeHeight = typeof size.height === 'number' ? size.height : 0;
-            if (!(nodeHeight > 0)) {
-                nodeHeight = this.html ? this.html.offsetHeight : 0;
-                if (nodeHeight > 0 && scaleY)
-                    nodeHeight = nodeHeight / scaleY;
-            }
-            if (!(nodeHeight > 0))
-                nodeHeight = 260;
-
-            let offsetX = nodeWidth / 2;
-            if (!(offsetX > 0))
-                offsetX = nodeWidth || 170;
-
-            let offsetY = nodeHeight - 12;
-            if (!(offsetY > 0))
-                offsetY = Math.max(nodeHeight, 40);
-
+            this._ensureMainOutPortAttrs(outPort);
             this.model.portProp(outPort.id, 'args/x', offsetX);
             this.model.portProp(outPort.id, 'args/y', offsetY);
         },
@@ -1054,15 +1133,31 @@
             });
 
             if (!existingOutPort) {
+                let basePosition = this.baseOutPortPosition || {
+                    x: (this.defaultSize && typeof this.defaultSize.width === 'number' && this.defaultSize.width > 0) ? this.defaultSize.width / 2 : 170,
+                    y: (this.defaultSize && typeof this.defaultSize.height === 'number' && this.defaultSize.height > 0) ? this.defaultSize.height : 340
+                };
                 this.model.addPort({
                     id: `out_${this.model.id}`,
                     group: 'out',
                     args: {
-                        x: 0,
-                        y: 0
+                        x: basePosition.x,
+                        y: basePosition.y
+                    },
+                    attrs: {
+                        portBody: {
+                            cx: basePosition.x,
+                            cy: basePosition.y
+                        }
                     }
                 });
+                existingOutPort = this.model.getPorts().find(function(port) {
+                    return port.group === 'out';
+                });
             }
+
+            if (existingOutPort)
+                this._ensureMainOutPortAttrs(existingOutPort);
 
             this.alignMainOutPort();
         },
