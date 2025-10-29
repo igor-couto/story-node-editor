@@ -218,6 +218,10 @@
                 width: defaultWidth,
                 height: defaultHeight
             };
+            this.currentMeasuredSize = {
+                width: defaultWidth,
+                height: defaultHeight
+            };
             this.baseChoicesHeight = 0;
             this.baseOutPortPosition = this._readMainOutPortBasePosition();
             this.baseOutPortDelta = this._computeMainOutPortDelta(this.baseOutPortPosition);
@@ -526,10 +530,12 @@
                 this.imageInput.value = '';
             if (window.storyNodeEditor && typeof window.storyNodeEditor.notifyImageUsageChange === 'function')
                 window.storyNodeEditor.notifyImageUsageChange();
+            this.refreshMainOutPortAlignment();
         },
 
         onImageLoad: function() {
             this.adjustNodeSize();
+            this.refreshMainOutPortAlignment();
         },
 
         onImageError: function() {
@@ -537,6 +543,7 @@
                 this.imageElement.removeAttribute('src');
             if (this.model && this.model.prop(['fields', 'image']))
                 this.model.prop(['fields', 'image'], '');
+            this.refreshMainOutPortAlignment();
         },
 
         updateFields: function() {
@@ -859,6 +866,11 @@
             if (!html.style.height)
                 html.style.height = measuredHeightPx + 'px';
 
+            this.currentMeasuredSize = {
+                width: defaultWidth,
+                height: measuredHeightPx
+            };
+
             this.scheduleChoicePortAlignment();
         },
 
@@ -1032,7 +1044,11 @@
                 let scaleY = scale.sy || 1;
 
                 let size = this.model.get('size') || {};
+                let measuredSize = this.currentMeasuredSize || {};
+
                 let nodeWidth = typeof size.width === 'number' ? size.width : 0;
+                if (!(nodeWidth > 0) && typeof measuredSize.width === 'number' && measuredSize.width > 0)
+                    nodeWidth = measuredSize.width;
                 if (!(nodeWidth > 0)) {
                     nodeWidth = this.html ? this.html.offsetWidth : 0;
                     if (nodeWidth > 0 && scaleX)
@@ -1042,6 +1058,8 @@
                     nodeWidth = (this.defaultSize && typeof this.defaultSize.width === 'number' && this.defaultSize.width > 0) ? this.defaultSize.width : basePosition.x * 2;
 
                 let nodeHeight = typeof size.height === 'number' ? size.height : 0;
+                if (!(nodeHeight > 0) && typeof measuredSize.height === 'number' && measuredSize.height > 0)
+                    nodeHeight = measuredSize.height;
                 if (!(nodeHeight > 0)) {
                     nodeHeight = this.html ? this.html.offsetHeight : 0;
                     if (nodeHeight > 0 && scaleY)
@@ -1057,6 +1075,16 @@
             this._ensureMainOutPortAttrs(outPort);
             this.model.portProp(outPort.id, 'args/x', offsetX);
             this.model.portProp(outPort.id, 'args/y', offsetY);
+        },
+
+        refreshMainOutPortAlignment: function() {
+            let choices = Array.isArray(this.currentChoices) ? this.currentChoices : [];
+            if (choices.length > 0)
+                return;
+
+            this.removeMainOutPort();
+            this.ensureMainOutPort();
+            this.scheduleChoicePortAlignment();
         },
 
         onAddChoice: function(evt) {
